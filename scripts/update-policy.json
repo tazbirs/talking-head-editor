@@ -1,0 +1,5 @@
+{
+  "auto_update": "minor",
+  "_levels": "patch = update on every stable release; minor = new minor or major versions (default); major = major versions only",
+  "_channel": "stable releases only; pre-release and nightly builds are always skipped"
+}

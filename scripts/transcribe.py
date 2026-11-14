@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""Word-level timings for a talking-head clip, optionally aligned to the person's script.
+
+usage: transcribe.py <media> --out <dir> [--language bn|en|...] [--script <file>]
+                     [--terms "Name One, Name Two"] [--model mlx-community/whisper-large-v3-mlx]
+
+Writes <dir>/words.json      [{id, text, start, end, how}]
+       <dir>/sentences.json  [{id, text, start, end, words: [first_id, last_id]}]
+       <dir>/whisper.json    Whisper's raw output
+and prints a JSON summary.
+
+With --script, the text is the script's (its spelling is trusted) and Whisper only
+supplies timing. `how` says where each word's timing came from:
+  exact  - the same word was recognised
+  fuzzy  - matched by characters inside a stretch Whisper heard differently
+  interp - not recognised; spread between its neighbours' times
+"""
+import argparse
+import difflib
+import json
+import os
+import re
+import sys
+import unicodedata
+
+from common import need, probe, run
+
+SENTENCE_END = "।.?!\n"
+STRIP = re.compile(r"[^\wঀ-৿]+", re.UNICODE)
+
+
+def norm(word):
+    """Comparison form: NFC, lower-case, no punctuation, no zero-width joiners."""
+    w = unicodedata.normalize("NFC", word).lower().replace("‌", "").replace("‍", "")
+    return STRIP.sub("", w)
+
+
+def whisper_words(raw):
+    out = []
+    for seg in raw.get("segments", []):
+        for w in seg.get("words", []) or []:
+            text = w.get("word", "").strip()
+            if text and w.get("end", 0) >= w.get("start", 0):
+                out.append({"text": text, "start": float(w["start"]), "end": float(w["end"])})
+    return out
+
+
+def split_script(text):
+    """Script -> [(word, ends_sentence)]. Lines in brackets are stage directions and are skipped."""
+    text = unicodedata.normalize("NFC", text)
+    text = re.sub(r"[\[(（].*?[\])）]", " ", text)
+    tokens = []
+    for line in text.splitlines():
+        parts = line.split()
+        for i, tok in enumerate(parts):
+            if not norm(tok):
+                if tokens and any(c in SENTENCE_END for c in tok):
+                    tokens[-1] = (tokens[-1][0], True)
+                continue
+            ends = tok[-1] in SENTENCE_END or i == len(parts) - 1
+            tokens.append((tok, ends))
+    return tokens
+
+
+def spread(n, t0, t1):
+    """n evenly spaced (start, end) pairs between t0 and t1."""
+    if n <= 0:
+        return []
+    t1 = max(t1, t0)
+    step = (t1 - t0) / n
+    return [(t0 + i * step, t0 + (i + 1) * step) for i in range(n)]
+
+
+def align_gap(script_words, heard):
+    """Timing for script words inside a stretch where no whole word matched.
+
+    Matches by characters: each heard word's time is spread over its characters, the
+    script's characters are aligned to them, and a script word takes the span of its
+    matched characters. Returns [(start, end) or None] per script word.
+    """
+    h_chars, h_times = [], []
+    for w in heard:
+        chars = norm(w["text"])
+        for k, c in enumerate(chars):
+            h_chars.append(c)
+            h_times.append(w["start"] + (w["end"] - w["start"]) * (k + 0.5) / len(chars))
+    s_chars, s_owner = [], []
+    for idx, w in enumerate(script_words):
+        for c in norm(w):
+            s_chars.append(c)
+            s_owner.append(idx)
+    spans = [None] * len(script_words)
+    if not h_chars or not s_chars:
+        return spans
+    sm = difflib.SequenceMatcher(None, s_chars, h_chars, autojunk=False)
+    hits = [[] for _ in script_words]
+    for a, b, size in sm.get_matching_blocks():
+        for k in range(size):
+            hits[s_owner[a + k]].append(h_times[b + k])
+    for idx, w in enumerate(script_words):
+        # Trust a word only when at least half of its characters were found.
+        if hits[idx] and len(hits[idx]) * 2 >= len(norm(w)):
+            spans[idx] = (min(hits[idx]), max(hits[idx]))
+    return spans
+
+
+def align(script_tokens, heard):
+    s_norm = [norm(w) for w, _ in script_tokens]
+    h_norm = [norm(w["text"]) for w in heard]
+    timing = [None] * len(script_tokens)
+    how = ["interp"] * len(script_tokens)
+
+    sm = difflib.SequenceMatcher(None, s_norm, h_norm, autojunk=False)
+    blocks = sm.get_matching_blocks()
+    for a, b, size in blocks:
+        for k in range(size):
+            timing[a + k] = (heard[b + k]["start"], heard[b + k]["end"])
+            how[a + k] = "exact"
+
+    # Stretches between exact anchors: try character matching.
+    prev_a = prev_b = 0
+    for a, b, size in blocks:
+        if a > prev_a and b > prev_b:
+            spans = align_gap([w for w, _ in script_tokens[prev_a:a]], heard[prev_b:b])
+            for k, span in enumerate(spans):
+                if span:
+                    timing[prev_a + k] = span
+                    how[prev_a + k] = "fuzzy"
+        prev_a, prev_b = a + size, b + size
+
+    # Whatever is left: spread between the nearest timed neighbours.
+    total = heard[-1]["end"] if heard else 0.0
+    i = 0
+    while i < len(timing):
+        if timing[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j < len(timing) and timing[j] is None:
+            j += 1
+        t0 = timing[i - 1][1] if i > 0 else (heard[0]["start"] if heard else 0.0)
+        t1 = timing[j][0] if j < len(timing) else total
+        for k, span in enumerate(spread(j - i, t0, t1)):
+            timing[i + k] = span
+        i = j
+
+    # Keep times in order and give every word a visible length.
+    words, last = [], 0.0
+    for idx, (tok, _) in enumerate(script_tokens):
+        start, end = timing[idx]
+        start = max(start, last)
+        end = max(end, start + 0.04)
+        last = start
+        words.append({"id": "w%d" % idx, "text": tok, "start": round(start, 3),
+                      "end": round(end, 3), "how": how[idx]})
+    return words
+
+
+def sentences_from(words, ends):
+    out, first = [], 0
+    for i, w in enumerate(words):
+        if ends[i] or i == len(words) - 1:
+            chunk = words[first:i + 1]
+            out.append({"id": "s%d" % len(out), "text": " ".join(x["text"] for x in chunk),
+                        "start": chunk[0]["start"], "end": chunk[-1]["end"],
+                        "words": [chunk[0]["id"], chunk[-1]["id"]]})
+            first = i + 1
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("media")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--language", help="ISO code such as bn or en; omit only for unknown audio")
+    ap.add_argument("--script", help="text file with what the speaker says")
+    ap.add_argument("--model", default="mlx-community/whisper-large-v3-mlx")
+    ap.add_argument("--terms", help="a few names or technical terms to help spelling, e.g. 'HyperFrames, Kling AI'")
+    args = ap.parse_args()
+
+    need("ffmpeg")
+    need("mlx_whisper")
+    os.makedirs(args.out, exist_ok=True)
+    info = probe(args.media)
+    if info.get("audio_codec") is None:
+        raise SystemExit(json.dumps({"error": "the file has no audio track"}))
+
+    wav = os.path.join(args.out, "audio-16k.wav")
+    code, _, err = run(["ffmpeg", "-v", "error", "-y", "-i", args.media, "-vn", "-ac", "1",
+                        "-ar", "16000", wav], timeout=1800)
+    if code != 0:
+        raise SystemExit(json.dumps({"error": "could not extract audio", "detail": err[-400:]}))
+
+    script_text = None
+    if args.script:
+        with open(args.script, encoding="utf-8") as f:
+            script_text = f.read()
+
+    cmd = ["mlx_whisper", wav, "--model", args.model, "--word-timestamps", "True",
+           "--output-format", "json", "--output-dir", args.out, "--output-name", "whisper",
+           "--condition-on-previous-text", "False", "--verbose", "False"]
+    if args.language:
+        cmd += ["--language", args.language]
+    # Never prime Whisper with the script itself: given the words it is about to hear, it
+    # treats them as already transcribed and skips the speech (measured: 3 of 45 words heard).
+    # A short list of names and terms is safe.
+    if args.terms:
+        cmd += ["--initial-prompt", args.terms[:200]]
+    # Roughly real time is the worst case on Apple Silicon; allow twice that plus model download.
+    code, out, err = run(cmd, timeout=int(info["duration"] * 2) + 3600)
+    raw_path = os.path.join(args.out, "whisper.json")
+    if code != 0 or not os.path.exists(raw_path):
+        raise SystemExit(json.dumps({"error": "whisper failed", "detail": (err or out)[-600:]}))
+    with open(raw_path, encoding="utf-8") as f:
+        raw = json.load(f)
+    heard = whisper_words(raw)
+    if not heard:
+        raise SystemExit(json.dumps({"error": "whisper found no speech"}))
+
+    summary = {"language": raw.get("language"), "duration": info["duration"],
+               "heard_words": len(heard), "model": args.model}
+    if script_text:
+        tokens = split_script(script_text)
+        words = align(tokens, heard)
+        ends = [e for _, e in tokens]
+        counts = {k: sum(1 for w in words if w["how"] == k) for k in ("exact", "fuzzy", "interp")}
+        rate = (counts["exact"] + counts["fuzzy"]) / max(1, len(words))
+        summary.update({"script_words": len(words), "timing_from": counts, "match_rate": round(rate, 3)})
+        if rate < 0.6:
+            summary["warning"] = ("Under 60% of the script was found in the speech. The script may not "
+                                  "match this take, or recognition was weak: spot-check sentences.json.")
+        if words and words[-1]["end"] > info["duration"]:
+            summary["warning_end"] = "The last word ends past the media: clamp to the file's duration."
+    else:
+        words = [{"id": "w%d" % i, "text": w["text"], "start": round(w["start"], 3),
+                  "end": round(w["end"], 3), "how": "heard"} for i, w in enumerate(heard)]
+        ends = [w["text"][-1] in SENTENCE_END for w in words]
+        summary["note"] = "No script given: the text is Whisper's own and its spelling is unverified."
+
+    sentences = sentences_from(words, ends)
+    for name, data in (("words.json", words), ("sentences.json", sentences)):
+        with open(os.path.join(args.out, name), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    summary.update({"sentences": len(sentences), "out": os.path.abspath(args.out)})
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
