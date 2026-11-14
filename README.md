@@ -128,7 +128,7 @@ scripts/
   probe.py                 facts about a clip (resolution, fps, HDR, keyframes)
   transcribe.py            Whisper word timings, aligned to the script's own text
   pace.py                  timings for a video with no voice, from reading pace
-  voice.py                 generated voiceover and its timings (say, Kokoro, Azure, edge-tts)
+  voice.py                 generated voiceover and its timings (say, Kokoro, ElevenLabs, Azure, edge-tts)
   qc.py                    checks a render against its source; writes contact sheets
   smoke_test.py            proves FFmpeg, Whisper and HyperFrames still work
   check_updates.py         stable-only update check, apply and verify
@@ -144,6 +144,7 @@ For a video with no speaker, Claude asks which voice you want before building.
 | --- | --- | --- | --- |
 | Your own recording | yes | yes | Best result. Claude gives you the narration to read and times the video to your audio. |
 | Kokoro (local) | no | natural, male and female | Free, nothing leaves your machine. |
+| ElevenLabs | natural and expressive (Eleven v3 model) | natural | Official. Needs your own key in `ELEVENLABS_API_KEY`; you pick the voice in your account. Free to try, paid plan to publish. |
 | Azure Speech | natural, male and female | natural | Official and licensed. Needs your own key in `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`. |
 | edge-tts | same voices as Azure | same | Free and needs no account, but it is an unofficial route: your call whether to publish with it. |
 | macOS `say` | one synthetic female voice | several | A draft voice for checking timing. Apple licenses it for personal, non-commercial use. |
@@ -170,7 +171,7 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
 - Animated explainer: a 2.5-minute, 11-scene Bangla explainer made from a script, with a real page capture and bundled sound effects, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
-- Voices: local English (Kokoro, male and female) verified by transcribing it back; a narrated 4.5-minute render stayed in sync with its voice file to the millisecond. The Azure and edge-tts engines are written but have not been run. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
+- Voices: local English (Kokoro, male and female) verified by transcribing it back; a narrated 4.5-minute render stayed in sync with its voice file to the millisecond. The ElevenLabs, Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 

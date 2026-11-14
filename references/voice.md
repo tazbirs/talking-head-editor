@@ -29,6 +29,7 @@ All three write the same `sentences.json` and `words.json`, so the build does no
 | Engine | Bangla | English | Cost and account | Leaves this machine | Fit to publish |
 | --- | --- | --- | --- | --- | --- |
 | `kokoro` (HyperFrames, local) | none | natural, male and female | free, no account | no | yes |
+| `elevenlabs` (ElevenLabs) | natural and expressive, on the Eleven v3 model only; the accent depends on the voice the person picks | natural, many | the person's own key; 10,000 characters a month free, commercial licence from the Starter plan | yes, to ElevenLabs | yes, on a paid plan |
 | `azure` (Microsoft Azure Speech) | natural, male (Pradeep) and female (Nabanita), Bangladesh accent | natural, many | the person's own Azure key; has a free monthly allowance | yes, to Microsoft | yes, licensed |
 | `edge` (same Microsoft voices, unofficial tool) | same voices | same voices | free, no account | yes, to Microsoft | unclear: not a licensed route |
 | `say` (macOS built-in) | Piya only: female, India accent, synthetic | several | free, macOS only | no | no: Apple licenses system voices for personal, non-commercial use |
@@ -37,8 +38,9 @@ All three write the same `sentences.json` and `words.json`, so the build does no
 What follows from the table:
 
 - **English:** `kokoro` is the default. Local, free, natural. It sets itself up on first use (a small Python environment under `~/.cache/talking-head-editor/`).
-- **Bangla:** there is no natural Bangla voice that is both local and free. The honest choices are the person's own recording, `azure` with their key, or `edge` if they accept that it is an unofficial route. `say` is a draft voice for checking timing, not for publishing.
-- Never run an engine that sends the script to an outside service unless the person chose that engine in this conversation. Their key goes in the environment (`AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`); never ask them to paste it into the chat, and never write it to a file.
+- **Bangla:** there is no natural Bangla voice that is both local and free. The honest choices are the person's own recording, `elevenlabs` or `azure` with their key, or `edge` if they accept that it is an unofficial route. `say` is a draft voice for checking timing, not for publishing.
+- **ElevenLabs:** the person picks the voice by ear in their own account and adds it to their voices; you cannot judge an accent. `voice.py --list --engine elevenlabs` shows their voices and which models can speak Bangla (it should include `eleven_v3`; set `ELEVENLABS_MODEL` if the id has changed). Pass the voice by name or id with `--voice`. The free plan is for trying a voice; tell the person that publishing needs a paid plan.
+- Never run an engine that sends the script to an outside service unless the person chose that engine in this conversation. Their key goes in the environment (`ELEVENLABS_API_KEY`, or `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`) or in a file they create themselves, `~/.config/talking-head-editor/keys.env`, as `NAME=value` lines. Never ask them to paste a key into the chat, never write one to a file yourself, and never print one.
 - Do not create an account or a key for the person.
 - A voice in the wrong language or accent reading the text is worse than no voice. If nothing suitable exists, say so.
 

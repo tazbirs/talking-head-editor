@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Make a voiceover from a narration file, and the timing that goes with it.
 
-usage: voice.py <narration file> --out <dir> --engine say|kokoro|azure|edge
-                [--voice <name>] [--gender male|female] [--language bn|en]
+usage: voice.py <narration file> --out <dir> --engine say|kokoro|elevenlabs|azure|edge
+                [--voice <name or id>] [--gender male|female] [--language bn|en]
                 [--lines <on-screen lines file>] [--rate <engine rate>]
                 [--lead 0.4] [--pause 0.4] [--gap 0.6] [--min 2.3]
-       voice.py --list
+       voice.py --list                        engines and built-in voices
+       voice.py --list --engine elevenlabs    the voices and Bangla-capable models in the person's account
 
 The narration file has one spoken passage per line and a blank line between scenes; text in
 brackets is a note. Each passage is spoken separately, so its length is known exactly and
@@ -23,11 +24,17 @@ sentences.json carries the on-screen text and keeps the spoken text under "spoke
 Engines
   say     macOS built-in voices. Local and free. Bangla: Piya (female) only. A draft voice.
   kokoro  HyperFrames' local Kokoro model. Local and free. Natural English; no Bangla.
+  elevenlabs  ElevenLabs (official). The most expressive Bangla and English voices; Bangla needs the
+          Eleven v3 model. Needs ELEVENLABS_API_KEY, and --voice with a voice name or id from the
+          person's account. Publishing needs a paid plan (commercial licence).
   azure   Microsoft Azure Speech (official). Natural Bangla and English, male and female.
           Needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION in the environment.
   edge    The same Microsoft neural voices through the unofficial `edge-tts` tool. No account,
           but it is not a licensed route: use only when the person has chosen it.
-azure and edge send the narration text to Microsoft.
+azure and edge send the narration text to Microsoft; elevenlabs sends it to ElevenLabs.
+
+Keys are read from the environment, or from ~/.config/talking-head-editor/keys.env (NAME=value
+lines, a file the person creates themselves). They are never printed or written anywhere.
 """
 import argparse
 import hashlib
@@ -54,9 +61,14 @@ VOICES = {
               "en": {"male": "en-US-GuyNeural", "female": "en-US-JennyNeural"}},
 }
 VOICES["edge"] = VOICES["azure"]
+VOICES["elevenlabs"] = {}      # voices live in the person's account: pass --voice
+ELEVEN_API = "https://api.elevenlabs.io/v1"
+KEYS_FILE = os.path.join(os.path.expanduser("~"), ".config", "talking-head-editor", "keys.env")
 NOTES = {
     "say": "macOS only, local. Apple's licence covers personal, non-commercial use: a draft voice.",
     "kokoro": "Local, natural English. Installs on first use.",
+    "elevenlabs": "Official. Bangla needs the Eleven v3 model. Needs ELEVENLABS_API_KEY and --voice. Publishing "
+                  "needs a paid plan. Sends text to ElevenLabs.",
     "azure": "Official and licensed. Needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION. Sends text to Microsoft.",
     "edge": "Unofficial access to Microsoft's voices: no account, not a licensed route. Sends text to Microsoft.",
 }
@@ -66,7 +78,79 @@ def fail(message, **extra):
     raise SystemExit(json.dumps(dict({"error": message}, **extra), ensure_ascii=False))
 
 
+def secret(name):
+    """A key from the environment, else from the person's own keys file. Never logged."""
+    value = os.environ.get(name)
+    if value:
+        return value.strip()
+    try:
+        with open(KEYS_FILE, encoding="utf-8") as f:
+            for line in f:
+                key, _, val = line.strip().partition("=")
+                if key.strip() == name and val.strip():
+                    return val.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return None
+
+
+def eleven_get(path):
+    """GET from the ElevenLabs API. Returns (data, None) or (None, error)."""
+    key = secret("ELEVENLABS_API_KEY")
+    if not key:
+        return None, "ELEVENLABS_API_KEY is not set (environment, or %s)" % KEYS_FILE
+    req = urllib.request.Request(ELEVEN_API + path, headers={"xi-api-key": key, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r), None
+    except urllib.error.HTTPError as e:
+        return None, "ElevenLabs refused the request: HTTP %s %s" % (e.code, e.reason)
+    except Exception as e:
+        return None, "ElevenLabs could not be reached: %s" % e
+
+
+def eleven_overview(language="bn"):
+    """The person's voices, and the models that can speak `language`."""
+    voices, error = eleven_get("/voices")
+    if error:
+        return None, error
+    models, error = eleven_get("/models")
+    if error:
+        return None, error
+    able = [m["model_id"] for m in models if m.get("can_do_text_to_speech")
+            and any(l.get("language_id") == language for l in m.get("languages", []))]
+    listing = [{"name": v.get("name"), "voice_id": v.get("voice_id"), "category": v.get("category"),
+                "gender": (v.get("labels") or {}).get("gender"), "accent": (v.get("labels") or {}).get("accent"),
+                "language": (v.get("labels") or {}).get("language")} for v in voices.get("voices", [])]
+    return {"models_for_%s" % language: able, "voices": listing}, None
+
+
+def eleven_voice_id(asked):
+    """Accept a voice id as it is, or find a voice by name in the person's account."""
+    if re.fullmatch(r"[A-Za-z0-9]{20}", asked or ""):
+        return asked, None
+    voices, error = eleven_get("/voices")
+    if error:
+        return None, error
+    names = {(v.get("name") or "").lower(): v.get("voice_id") for v in voices.get("voices", [])}
+    wanted = (asked or "").lower()
+    hits = [vid for name, vid in names.items() if name == wanted] or \
+           [vid for name, vid in names.items() if name.startswith(wanted)]
+    if len(hits) == 1:
+        return hits[0], None
+    return None, ("No single voice named %r in this ElevenLabs account. Add the voice to the account's "
+                  "voices first; `voice.py --list --engine elevenlabs` shows what is there." % asked)
+
+
 def pick_voice(engine, language, gender, asked):
+    if engine == "elevenlabs":
+        if not asked:
+            fail("ElevenLabs voices are chosen by the person: pass --voice with a voice name or id.",
+                 fix="python3 voice.py --list --engine elevenlabs")
+        voice_id, error = eleven_voice_id(asked)
+        if error:
+            fail(error)
+        return voice_id
     if asked:
         return asked
     by_gender = VOICES.get(engine, {}).get(language)
@@ -118,8 +202,32 @@ def speak(engine, voice, language, rate, text, raw):
         cmd = runner + ["--voice", voice, "--text", text, "--write-media", raw] + (["--rate", str(rate)] if rate else [])
         code, out, err = run(cmd, timeout=300)
         return None if code == 0 and os.path.exists(raw) else "edge-tts failed: " + (err or out).strip()[-300:]
+    if engine == "elevenlabs":
+        key = secret("ELEVENLABS_API_KEY")
+        if not key:
+            return "ELEVENLABS_API_KEY is not set (environment, or %s)" % KEYS_FILE
+        body = {"text": text, "model_id": secret("ELEVENLABS_MODEL") or "eleven_v3", "language_code": language}
+        if rate:
+            body["voice_settings"] = {"speed": float(rate)}
+        req = urllib.request.Request(
+            "%s/text-to-speech/%s?output_format=mp3_44100_128" % (ELEVEN_API, voice),
+            data=json.dumps(body).encode("utf-8"),
+            headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r, open(raw, "wb") as f:
+                f.write(r.read())
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.load(e).get("detail")
+                detail = detail.get("message") if isinstance(detail, dict) else detail
+            except Exception:
+                detail = None
+            return "ElevenLabs refused the request: HTTP %s %s" % (e.code, str(detail or e.reason)[:300])
+        except Exception as e:
+            return "ElevenLabs could not be reached: %s" % e
+        return None
     if engine == "azure":
-        key, region = os.environ.get("AZURE_SPEECH_KEY"), os.environ.get("AZURE_SPEECH_REGION")
+        key, region = secret("AZURE_SPEECH_KEY"), secret("AZURE_SPEECH_REGION")
         if not key or not region:
             return "AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are not set"
         locale = "-".join(voice.split("-")[:2])
@@ -163,8 +271,8 @@ def main():
     ap.add_argument("--gender", choices=["male", "female"], default="male")
     ap.add_argument("--language", help="bn or en; detected from the narration when omitted")
     ap.add_argument("--lines", help="on-screen lines file matching the narration passage for passage")
-    ap.add_argument("--rate", help="speaking rate in the engine's own unit (say: words per minute; "
-                                   "kokoro: multiplier; azure and edge: e.g. +8%%)")
+    ap.add_argument("--rate", help="speaking rate in the engine's own unit (say: words per minute; kokoro and "
+                                   "elevenlabs: multiplier such as 0.95; azure and edge: e.g. +8%%)")
     ap.add_argument("--lead", type=float, default=0.4, help="silence before the first word, so the voice does not start on frame 0")
     ap.add_argument("--pause", type=float, default=0.4, help="silence after each passage")
     ap.add_argument("--gap", type=float, default=0.6, help="extra silence between scenes")
@@ -172,6 +280,12 @@ def main():
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
 
+    if args.list and args.engine == "elevenlabs":
+        overview, error = eleven_overview(args.language or "bn")
+        if error:
+            fail(error)
+        print(json.dumps(overview, ensure_ascii=False, indent=2))
+        return 0
     if args.list:
         print(json.dumps({"engines": NOTES, "voices": {k: v for k, v in VOICES.items()}}, ensure_ascii=False, indent=2))
         return 0
@@ -202,7 +316,7 @@ def main():
         tag = hashlib.sha1(("%s|%s|%s|%s" % (args.engine, voice, args.rate, text)).encode("utf-8")).hexdigest()[:16]
         wav = os.path.join(seg_dir, tag + ".wav")
         if not os.path.exists(wav):
-            raw = os.path.join(seg_dir, tag + {"say": ".aiff", "edge": ".mp3"}.get(args.engine, ".wav").replace(".wav", ".src.wav"))
+            raw = os.path.join(seg_dir, tag + {"say": ".aiff", "edge": ".mp3", "elevenlabs": ".mp3"}.get(args.engine, ".wav").replace(".wav", ".src.wav"))
             error = speak(args.engine, voice, language, args.rate, text, raw) or to_pcm(raw, wav)
             if os.path.exists(raw):
                 os.remove(raw)
