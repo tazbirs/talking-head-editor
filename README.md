@@ -1,8 +1,13 @@
 # talking-head-editor
 
-A Claude skill that edits raw talking-head footage into a finished YouTube video: dynamic zooms and reframing, split-screen and picture-in-picture layouts, motion graphics tied to what is being said, Bangla and English typography, sound effects, and a quality-checked H.264 export.
+A Claude skill that makes finished YouTube videos in Bangla or English, two ways:
 
-You give Claude the raw video and, ideally, the script. Claude does the rest and hands back an MP4.
+1. **Edit talking-head footage.** Dynamic zooms and reframing, split-screen and picture-in-picture layouts, motion graphics tied to what is being said, typography, sound effects, and a quality-checked H.264 export. You give Claude the raw video and, ideally, the script.
+2. **Make an animated explainer with no footage.** You give a topic or a script, optionally a recorded voiceover. Claude researches and writes the script when you give only a topic (and shows it to you first), then builds the video from type, diagrams, charts and real screenshots.
+
+Either way Claude hands back an MP4.
+
+The explainer mode is for motion graphics. It is not for cartoon-style character animation.
 
 ## Status
 
@@ -104,13 +109,14 @@ The Remotion skill is installed separately from its own repository; read it befo
 python3 ~/.claude/skills/talking-head-editor/scripts/smoke_test.py
 ```
 
-It encodes a clip with FFmpeg, times a spoken sentence with Whisper and renders a Bangla title with HyperFrames, then reports each stage. Start a new Claude Code session and say something like *"edit this video, the script is in script.txt"*.
+It encodes a clip with FFmpeg, times a spoken sentence with Whisper and renders a Bangla title with HyperFrames, then reports each stage. Start a new Claude Code session and say something like *"edit this video, the script is in script.txt"* or *"make a one-minute Bangla explainer about how frame rate works"*.
 
 ## What is in here
 
 ```
 SKILL.md                   the workflow Claude follows
 references/
+  animated-explainer.md    the no-footage mode: script, timing, plan and checks
   edit-plan.md             plan format, layouts, camera limits, emotion table
   typography.md            Bangla and English type, Bengali shaping checks
   sound.md                 sound sources, levels, which sound goes with which action
@@ -120,6 +126,7 @@ references/
 scripts/
   probe.py                 facts about a clip (resolution, fps, HDR, keyframes)
   transcribe.py            Whisper word timings, aligned to the script's own text
+  pace.py                  timings for a video with no voice, from reading pace
   qc.py                    checks a render against its source; writes contact sheets
   smoke_test.py            proves FFmpeg, Whisper and HyperFrames still work
   check_updates.py         stable-only update check, apply and verify
@@ -146,6 +153,7 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - End-to-end transcription with a script on synthetic English speech: 44 of 44 words matched.
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
+- Animated explainer: a 12-second, three-scene Bangla explainer with no voice, paced, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 

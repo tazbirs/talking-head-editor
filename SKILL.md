@@ -1,11 +1,16 @@
 ---
 name: talking-head-editor
-description: Fully edit a raw talking-head video into a finished, professionally edited YouTube MP4 - dynamic zooms and reframing, split-screen and picture-in-picture layouts, script-synced motion graphics, Bangla and English kinetic typography, sound effects and a quality-checked H.264 export. Use this skill whenever the person gives raw footage of someone speaking (with or without a script) and asks to edit it, make it engaging, add motion graphics, captions, zooms, b-roll or sound design, or says things like "edit my video", "edit this like a pro", "make this YouTube ready", "ভিডিও এডিট করো" - even when they do not name any tool. This is the entry point for talking-head edits; it drives the hyperframes and remotion-motion-graphics skills, so start here rather than with those.
+description: Make a finished, professionally edited YouTube video in Bangla or English, in one of two ways. (1) Edit raw talking-head footage - dynamic zooms and reframing, split-screen and picture-in-picture layouts, script-synced motion graphics, kinetic typography, sound effects, quality-checked H.264 export. (2) Make a fully animated explainer with no footage, from a topic or a script, with or without a recorded voiceover. Use this skill whenever the person gives footage of someone speaking and asks to edit it, make it engaging, or add motion graphics, captions, zooms or sound design; whenever they ask for an explainer, an animated video, a "how it works" or a video about a topic; and whenever a video needs Bangla text. Phrases like "edit my video", "make this YouTube ready", "make an explainer about X", "ভিডিও এডিট করো", "এই টপিকে একটা ভিডিও বানাও" should all trigger it, even when no tool is named. This is the entry point for these videos; it drives the hyperframes and remotion-motion-graphics skills, so start here rather than with those.
 ---
 
 # Talking-head editor
 
-Turn one raw clip of a person speaking into a finished edit that looks like an editor spent hours in Premiere and After Effects. The person supplies the footage and, usually, the script of what they say (Bangla, English, or a mix). You deliver a rendered MP4, not a plan.
+Two kinds of job come through this skill. Decide which one this is first:
+
+- **There is footage of a person speaking** to edit: follow the steps in this file.
+- **There is no footage** (an explainer, an animated video, a topic to discuss in pictures): do Step 0 below, then follow `references/animated-explainer.md` instead of Steps 1-7. Typography, sound, updates and the tool table still apply.
+
+The rest of this file describes the footage edit. Turn one raw clip of a person speaking into a finished edit that looks like an editor spent hours in Premiere and After Effects. The person supplies the footage and, usually, the script of what they say (Bangla, English, or a mix). You deliver a rendered MP4, not a plan.
 
 What the person wants, in their words: make the creative decisions yourself, do not ask them to pick each zoom or sound, and do not stop after analysis or planning. So this skill runs without stops: where the HyperFrames skill says to pause for a story pick or a preview approval, carry on, and report at the end what you chose.
 
@@ -114,6 +119,7 @@ Give the path of the MP4 and a short note:
 | Read | When |
 | --- | --- |
 | `references/edit-plan.md` | Before writing the plan: plan format, layouts, camera limits, emotion table, density |
+| `references/animated-explainer.md` | When there is no footage: script from a topic, timing without a speaker, the explainer plan and checks |
 | `references/typography.md` | Before any on-screen text: Bangla and English fonts, sizes, shaping checks |
 | `references/sound.md` | Before placing audio: sources, levels, which sound goes with which action |
 | `references/platforms.md` | When a tool is missing, or on any system other than an Apple Silicon Mac |

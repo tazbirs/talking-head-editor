@@ -2,6 +2,12 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - animated explainer mode
+
+- First real run: a 12 s, three-scene Bangla explainer with no voice, paced by `pace.py`, built in HyperFrames, rendered and checked with `qc.py --expect`. Bangla conjuncts rendered correctly with the bundled Hind Siliguri.
+- What the run taught: an entrance on the first line leaves an empty first frame (HyperFrames warns `first_frame_empty`), so `pace.py` now starts at 0 s; and a single-file composition with nested scenes passes `check` but warns `nested_structure_needs_subcomposition`, so use one sub-composition per scene as the reference says.
+- Not yet tried: a narrated explainer with a real voiceover, a script written from a topic, music or sound effects.
+
 ## 2026-11-14 - cross-platform support
 
 - Scripts now run on macOS (Apple Silicon and Intel), Linux and Windows. Tested for real on an Apple Silicon Mac only. The second Whisper engine (`whisper-ctranslate2`) was tested on that Mac; the apt, pacman, dnf and winget version checks were tested against sample output, not on those systems. The first run on Linux or Windows is the test: record what you find here.

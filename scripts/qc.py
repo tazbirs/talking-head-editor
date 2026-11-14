@@ -2,6 +2,11 @@
 """Check a rendered edit against its source, and lay out frames to look at.
 
 usage: qc.py --source <raw video> --output <edited mp4> [--plan edit-plan.json] [--sheets <dir>]
+       qc.py --output <animated mp4> --expect 1920x1080@30 [--voice <voiceover file>] [--plan ...]
+
+The first form is for an edit of footage: the render must match its source. The second is
+for a video with no footage: it is checked against the size you intended and, when there is
+a recorded voiceover, against that recording.
 
 Prints JSON: a list of checks (pass / warn / fail) and the contact sheets written.
 The sheets are for looking at: this script cannot judge a frame, only produce it.
@@ -114,7 +119,9 @@ def contact_sheets(output, picks, out_dir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--source", required=True)
+    ap.add_argument("--source", help="the raw footage the edit was made from")
+    ap.add_argument("--voice", help="the voiceover recording, for a video with no footage")
+    ap.add_argument("--expect", help="intended size and frame rate, e.g. 1920x1080@30")
     ap.add_argument("--output", required=True)
     ap.add_argument("--plan")
     ap.add_argument("--sheets", help="folder for contact sheets (default: beside the output)")
@@ -123,43 +130,74 @@ def main():
 
     if not os.path.exists(args.output) or os.path.getsize(args.output) == 0:
         raise SystemExit(json.dumps({"error": "the output file is missing or empty"}))
-    src, out = probe(args.source), probe(args.output)
+    if not args.source and not args.expect:
+        raise SystemExit(json.dumps({"error": "give --source (an edit of footage) or --expect WxH@fps (no footage)"}))
+    out = probe(args.output)
     checks = []
 
     def add(name, status, detail):
         checks.append({"check": name, "status": status, "detail": detail})
 
-    same_size = (src.get("width"), src.get("height")) == (out.get("width"), out.get("height"))
-    add("resolution", "pass" if same_size else "fail",
-        "source %sx%s, output %sx%s" % (src.get("width"), src.get("height"), out.get("width"), out.get("height")))
-    fps_ok = abs((src.get("fps_float") or 0) - (out.get("fps_float") or 0)) < 0.02
-    add("frame rate", "pass" if fps_ok else "fail",
-        "source %s, output %s" % (src.get("fps"), out.get("fps")))
     frame = 1.0 / (out.get("fps_float") or 30)
-    drift = out["duration"] - src["duration"]
-    add("duration", "pass" if abs(drift) <= max(0.1, 2 * frame) else "fail",
-        "source %.2fs, output %.2fs (%+.2fs)" % (src["duration"], out["duration"], drift))
+    if args.source:
+        src = probe(args.source)
+        same_size = (src.get("width"), src.get("height")) == (out.get("width"), out.get("height"))
+        add("resolution", "pass" if same_size else "fail",
+            "source %sx%s, output %sx%s" % (src.get("width"), src.get("height"), out.get("width"), out.get("height")))
+        fps_ok = abs((src.get("fps_float") or 0) - (out.get("fps_float") or 0)) < 0.02
+        add("frame rate", "pass" if fps_ok else "fail",
+            "source %s, output %s" % (src.get("fps"), out.get("fps")))
+        drift = out["duration"] - src["duration"]
+        add("duration", "pass" if abs(drift) <= max(0.1, 2 * frame) else "fail",
+            "source %.2fs, output %.2fs (%+.2fs)" % (src["duration"], out["duration"], drift))
+    else:
+        m = re.match(r"^(\d+)x(\d+)(?:@([\d.]+))?$", args.expect.strip())
+        if not m:
+            raise SystemExit(json.dumps({"error": "--expect looks like 1920x1080@30"}))
+        want_w, want_h = int(m.group(1)), int(m.group(2))
+        add("resolution", "pass" if (out.get("width"), out.get("height")) == (want_w, want_h) else "fail",
+            "intended %dx%d, output %sx%s" % (want_w, want_h, out.get("width"), out.get("height")))
+        if m.group(3):
+            add("frame rate", "pass" if abs(float(m.group(3)) - (out.get("fps_float") or 0)) < 0.02 else "fail",
+                "intended %s, output %s" % (m.group(3), out.get("fps")))
+        if args.plan and os.path.exists(args.plan):
+            with open(args.plan, encoding="utf-8") as f:
+                planned = float(json.load(f).get("source", {}).get("duration") or 0)
+            if planned:
+                add("duration", "pass" if abs(out["duration"] - planned) <= max(0.25, 2 * frame) else "warn",
+                    "planned %.2fs, output %.2fs" % (planned, out["duration"]))
+    reference = args.source or args.voice
+    if args.voice and not args.source:
+        voice = probe(args.voice)
+        add("covers the voiceover", "pass" if out["duration"] >= voice["duration"] - 0.05 else "fail",
+            "voiceover %.2fs, output %.2fs" % (voice["duration"], out["duration"]))
     add("video codec", "pass" if out.get("video_codec") == "h264" else "fail", str(out.get("video_codec")))
-    add("audio codec", "pass" if out.get("audio_codec") == "aac" else "fail", str(out.get("audio_codec")))
+    silent_ok = not args.source and not args.voice and out.get("audio_codec") is None
+    add("audio codec", "pass" if out.get("audio_codec") == "aac" else ("warn" if silent_ok else "fail"),
+        str(out.get("audio_codec")))
     add("pixel format", "pass" if out.get("pix_fmt") == "yuv420p" else "warn",
         "%s (yuv420p plays everywhere)" % out.get("pix_fmt"))
 
     # Voice sync: near the start and near the end, to catch a constant offset and a drift.
-    shortest = min(src["duration"], out["duration"])
-    windows = [("start", 0.0)]
-    if shortest > WINDOW_S * 2.5:
-        windows.append(("end", shortest - WINDOW_S - 1))
-    for label, at in windows:
-        off, sure = offset_ms(envelope(args.source, at, WINDOW_S), envelope(args.output, at, WINDOW_S))
-        if off is None or sure < 0.3:
-            add("voice sync (%s)" % label, "warn",
-                "could not be measured (confidence %.2f): music or effects may mask the voice here" % sure)
-        else:
-            add("voice sync (%s)" % label, "pass" if abs(off) <= 40 else "fail",
-                "output voice is %+.0f ms relative to the source (confidence %.2f)" % (off, sure))
+    if reference:
+        shortest = min(probe(reference)["duration"], out["duration"])
+        windows = [("start", 0.0)]
+        if shortest > WINDOW_S * 2.5:
+            windows.append(("end", shortest - WINDOW_S - 1))
+        for label, at in windows:
+            off, sure = offset_ms(envelope(reference, at, WINDOW_S), envelope(args.output, at, WINDOW_S))
+            if off is None or sure < 0.3:
+                add("voice sync (%s)" % label, "warn",
+                    "could not be measured (confidence %.2f): music or effects may mask the voice here" % sure)
+            else:
+                add("voice sync (%s)" % label, "pass" if abs(off) <= 40 else "fail",
+                    "output voice is %+.0f ms relative to the %s (confidence %.2f)"
+                    % (off, "source" if args.source else "recording", sure))
 
     lufs, peak = loudness(args.output)
-    if lufs is None:
+    if out.get("audio_codec") is None:
+        add("loudness", "warn", "the video has no audio track: say so at delivery")
+    elif lufs is None:
         add("loudness", "warn", "could not be measured")
     else:
         add("loudness", "pass" if -18.0 <= lufs <= -12.0 else "warn",
