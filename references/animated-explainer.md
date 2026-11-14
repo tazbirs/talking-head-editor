@@ -63,11 +63,11 @@ Rules that matter most here:
 - **The first frame is the thumbnail.** The opening line and its picture are already on screen at 0 s and only settle; an entrance that starts from nothing leaves an empty first frame (`check` reports `first_frame_empty`).
 - **Use the whole frame.** Size the picture to the canvas: the main device fills roughly the middle 60% of the height, and labels are at least 40 px. Text in the top corner with the rest empty reads as a slide, not a film. Look for this in the snapshots.
 
-## 5. Build, check, render
+## 5. Build, check, preview, render
 
 Build as the HyperFrames skill describes: one sub-composition per scene, registry blocks before hand-built effects, the Bengali fonts copied from this skill and declared with `@font-face`. With a voice, the audio file is an `<audio>` with an `id` in the root.
 
-Then the same loop as any edit: `check --json`, snapshots at the midpoint of every scene, look at each one, fix, render.
+Then the same loop as any edit: `check --json`, snapshots at the midpoint of every scene, look at each one, fix. Then open the video in the editor for the person and stop (`preview.md`, same as Step 6 of the footage edit): `python3 "$SKILL_DIR/scripts/preview.py" <dir>`. An explainer is usually built by a generator script from the lines and the timing; once the editor is open, that script is not run again, because it would erase what the person changed by hand. When they say render:
 
 ```bash
 python3 "$SKILL_DIR/scripts/qc.py" --output <mp4> --plan <dir>/edit-plan.json \

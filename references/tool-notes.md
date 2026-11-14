@@ -2,6 +2,23 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - preview in the editor before export (HyperFrames 0.9.45)
+
+- `hyperframes preview --background --json` prints one JSON line with `result.studioUrl` (`http://127.0.0.1:3002/#project/<folder name>`), `state` (`started`, or `reused` when it is already running) and `port`. `--stop --json` stops it. `preview.py` wraps both.
+- Studio writes hand edits straight into the composition files: a font size changed in the inspector became `style="font-size: 90px"` on the element, and Studio added a `data-hf-id` attribute to every element of that file. A generator script run afterwards erases this.
+- Opening a project in Studio adds `.hyperframes/`, `.thumbnails/` and `.waveform-cache/` to the project folder, and changes no source file by itself.
+- Studio showed a 4.5-minute, 11-scene project with a voiceover and 20 effects without trouble: scenes, the voiceover waveform and each effect on their own timeline rows.
+
+## 2026-11-14 - second narrated Bangla explainer (7 min 18 s, 17 scenes, generated from timing)
+
+- ElevenLabs "Mazed Talukdar - Calm" (male, Bengali, `oaRPRCwF6IVkimT1QKpn`), `eleven_v4`, verified for Bangla: 47 passages, 871 words, 128 words a minute. Adding or changing a passage re-spoke only that passage.
+- **Whisper on a long Bangla file skips whole stretches.** On the 7-minute voiceover it heard 429 of 859 words (match 0.46), although the voice had said them: the same stretches cut out with ffmpeg and transcribed alone (30-45 s each, or one passage at a time) came back complete. When `heard_words` is far under `script_words`, transcribe a few missing passages on their own before blaming the voice. Whisper also spells Bangla by sound (কোবিতা, প্রশ্নো), which lowers the match rate without any fault in the voice.
+- **GSAP origin on SVG.** In `fromTo`, an `svgOrigin` or `transformOrigin` given only in the "to" half leaves the element permanently offset (GSAP compensates for the origin change while the "from" scale or rotation is applied). Put the origin in both halves.
+- **Class rules beat SVG presentation attributes**: `stroke-width="10"` or `text-anchor="start"` on an element whose class sets that property does nothing. Use `style`.
+- `tl.set(..., 0)` for an initial hidden state warns `gsap_timeline_set_initial_hide`; use `gsap.set`.
+- `check` reports `dead_stretch` for any 3 s with no change it can see; thin strokes appearing (tick marks) do not count as change. Spread each scene's reveals across the passage.
+- Arabic: macOS has `Mishafi` (a Qur'anic naskh). `@font-face { src: local("Mishafi") }` renders locally with full tashkeel; `check` warns `font_face_local_only` and snapshot prints `Fonts FAILED: Mishafi`, but the frames are right. Its glyphs are small: about 1.6 times the Bangla size reads the same.
+
 ## 2026-11-14 - first narrated explainer with a natural Bangla voice
 
 - ElevenLabs, voice "Ashwat" (male, Bengali), on a Starter plan: 47 passages, 563 words, 4 min 35 s, 136 words a minute. The render passed `qc.py --voice` with the narration at +0 ms at both ends, -13.1 LUFS.

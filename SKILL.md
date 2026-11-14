@@ -8,11 +8,11 @@ description: Make a finished, professionally edited YouTube video in Bangla or E
 Two kinds of job come through this skill. Decide which one this is first:
 
 - **There is footage of a person speaking** to edit: follow the steps in this file.
-- **There is no footage** (an explainer, an animated video, a topic to discuss in pictures): do Step 0 below, then follow `references/animated-explainer.md` instead of Steps 1-7. Typography, sound, updates and the tool table still apply. In this mode, always ask the person about the voice before building (`references/voice.md`): record it themselves, a generated voice, or none. This is the one question that is asked even when they want no stops.
+- **There is no footage** (an explainer, an animated video, a topic to discuss in pictures): do Step 0 below, then follow `references/animated-explainer.md` instead of Steps 1-8. Typography, sound, updates and the tool table still apply. In this mode, always ask the person about the voice before building (`references/voice.md`): record it themselves, a generated voice, or none. This is the one question that is asked even when they want no stops. Before the export, the video opens in the editor for them, as in Step 6.
 
 The rest of this file describes the footage edit. Turn one raw clip of a person speaking into a finished edit that looks like an editor spent hours in Premiere and After Effects. The person supplies the footage and, usually, the script of what they say (Bangla, English, or a mix). You deliver a rendered MP4, not a plan.
 
-What the person wants, in their words: make the creative decisions yourself, do not ask them to pick each zoom or sound, and do not stop after analysis or planning. So this skill runs without stops: where the HyperFrames skill says to pause for a story pick or a preview approval, carry on, and report at the end what you chose.
+What the person wants, in their words: make the creative decisions yourself, do not ask them to pick each zoom or sound, and do not stop after analysis or planning. So this skill runs without stops: where the HyperFrames skill says to pause for a story pick, carry on, and report at the end what you chose. There is one planned stop, which the person asked for: before the final export, the finished video opens in the HyperFrames editor in their browser so they can watch it and adjust anything by hand (Step 6).
 
 ## How the pieces fit
 
@@ -90,13 +90,23 @@ Read `/hyperframes:hyperframes` (the contract) and its `references/overlays.md` 
 - Motion: apply the ten rules in the `remotion-motion-graphics` skill (eased or sprung motion, two or three properties per entrance, staggered arrivals, exits faster than entrances). Ignore its Remotion setup and render steps.
 - Sound: read `references/sound.md`. The voice stays dominant; effects are few and each has a cause on screen.
 
-## Step 5 - Check before rendering
+## Step 5 - Check before the preview
 
 1. `hyperframes check --json`; fix every error.
 2. `hyperframes snapshot --at <times>` at the midpoint of every beat that changes the picture, and read the PNGs. This is the only way you see the video. Look for, in this order: Bengali text with broken or separated letters, a cropped or squashed face, text outside the title-safe area or over the face, a graphic on the wrong sentence, the same zoom twice in a row.
 3. Fix and re-snapshot until a pass is clean.
 
-## Step 6 - Render and verify
+## Step 6 - Show it in the editor
+
+```bash
+python3 "$SKILL_DIR/scripts/preview.py" <dir>
+```
+
+This opens the video in the HyperFrames editor (Studio) in the person's browser. Give them the link, say in a few lines what they can change there by hand, and stop: they answer "render" or tell you what to change. Read `references/preview.md` first: it has what to say, when to skip this stop (they declined it, or nobody is there to look), how to read what they clicked in the editor, and the rule that matters most afterwards: the editor writes into the HTML files, so from this point never regenerate them from a build script.
+
+When they say render, `python3 "$SKILL_DIR/scripts/preview.py" <dir> --changes` lists what they changed by hand; re-check those scenes, keep their choices, and go on.
+
+## Step 7 - Render and verify
 
 ```bash
 hyperframes render --quality delivery --fps <source fps> -o <dir>/out/<name>-edited.mp4
@@ -107,11 +117,12 @@ A long video renders slowly: run it detached as the HyperFrames CLI skill descri
 
 `qc.py` verifies what the person asked to be preserved (resolution, frame rate, duration, H.264 + AAC), measures whether the voice has drifted out of sync with the original, measures loudness and true peak, and writes contact sheets of frames at every beat. Read its JSON and look at every contact sheet. Any `fail` is fixed and re-rendered before delivery.
 
-## Step 7 - Deliver
+## Step 8 - Deliver
 
 Give the path of the MP4 and a short note:
 
 - what the edit does (layouts used, roughly how many graphics, sound),
+- which files carry changes the person made by hand in the editor, if any,
 - what was measured and what was only inferred: you cannot hear, so say that sync and loudness were measured, not listened to,
 - anything you could not do, plainly. If a tool or skill was unavailable, say so instead of implying it was used; if the script and the speech disagreed, say where.
 
@@ -122,6 +133,7 @@ Give the path of the MP4 and a short note:
 | `references/edit-plan.md` | Before writing the plan: plan format, layouts, camera limits, emotion table, density |
 | `references/animated-explainer.md` | When there is no footage: script from a topic, timing without a speaker, the explainer plan and checks |
 | `references/voice.md` | Before building anything without a speaker: the voice question, voice engines for Bangla and English, narration writing, how to verify a voice you cannot hear |
+| `references/preview.md` | Before opening the editor for the person (Step 6), and whenever they changed something there by hand |
 | `references/typography.md` | Before any on-screen text: Bangla and English fonts, sizes, shaping checks |
 | `references/sound.md` | Before placing audio: sources, levels, which sound goes with which action |
 | `references/platforms.md` | When a tool is missing, or on any system other than an Apple Silicon Mac |

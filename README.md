@@ -5,7 +5,7 @@ A Claude skill that makes finished YouTube videos in Bangla or English, two ways
 1. **Edit talking-head footage.** Dynamic zooms and reframing, split-screen and picture-in-picture layouts, motion graphics tied to what is being said, typography, sound effects, and a quality-checked H.264 export. You give Claude the raw video and, ideally, the script.
 2. **Make an animated explainer with no footage.** You give a topic or a script. Claude always asks first whether you will record the narration yourself, want a generated voice, or want no voice. Claude researches and writes the script when you give only a topic (and shows it to you first), then builds the video from type, diagrams, charts and real screenshots.
 
-Either way Claude hands back an MP4.
+Either way Claude hands back an MP4. Before the final export, the video opens in the HyperFrames editor in your browser, so you can watch it and change anything by hand first.
 
 ## Watch it explained (Bangla, 4.5 minutes)
 
@@ -133,18 +133,33 @@ references/
   sound.md                 sound sources, levels, which sound goes with which action
   platforms.md             what differs on macOS, Linux and Windows
   updates.md               how tool updates are applied and verified
+  preview.md               opening the editor before export, and keeping hand changes
   tool-notes.md            what changed in each tool release; the skill's own memory
 scripts/
   probe.py                 facts about a clip (resolution, fps, HDR, keyframes)
   transcribe.py            Whisper word timings, aligned to the script's own text; takes a recording in parts
   pace.py                  timings for a video with no voice, from reading pace
   voice.py                 generated voiceover and its timings (say, Kokoro, ElevenLabs, Azure, edge-tts)
+  preview.py               opens the HyperFrames editor before export; lists what you changed there
   qc.py                    checks a render against its source; writes contact sheets
   smoke_test.py            proves FFmpeg, Whisper and HyperFrames still work
   check_updates.py         stable-only update check, apply and verify
   update-policy.json       how eager the updater is
 assets/fonts/              Hind Siliguri, Noto Sans Bengali, Noto Serif Bengali (OFL)
 ```
+
+## Preview and tweak before export
+
+When the video is built and has passed its checks, Claude opens it in the HyperFrames editor (Studio) in your browser and waits. There you can:
+
+- play the whole video with its sound,
+- click anything on the picture and change its text, font, size, colour or position,
+- drag a clip on the timeline to move or trim it, and undo,
+- click an element and tell Claude what to do with it ("make this bigger"): Claude reads what you selected.
+
+Say **render** when it looks right. Claude finds what you changed by hand, re-checks those scenes, keeps your changes, and exports with the usual quality check. The editor has its own Export button, which works but skips that check.
+
+The editor writes your changes into the project's HTML files, which is why Claude does not rebuild those files from scratch afterwards. If you do not want this stop, say "no preview" and Claude renders straight away.
 
 ## Voices
 
@@ -188,6 +203,7 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - Narrated explainer: the same video re-timed to a 563-word Bangla narration. Whisper identified the audio as Bengali and heard 559 of the 563 words; the narration sat at +0 ms against the voice file at the start and the end of the render.
 - Timing from a recording: aligning that natural Bangla audio to its script by transcription put passage starts within 0.3 s for 32 of 47 passages, with a worst case of 2.6 s. On a synthetic voice that Whisper recognised poorly, the same method was unreliable, and the script warns when recognition is that low.
 - Voices: local English (Kokoro, male and female) verified by transcribing it back. ElevenLabs is tested with a Bangla voice: a 4.5-minute narrated explainer, verified by transcription and in sync to the millisecond. The Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
+- Preview before export: the editor opened on the 4.5-minute explainer with all scenes, the narration and the effects on the timeline; a font size changed by hand in the editor was written into the scene's HTML file and reported by `preview.py --changes`. A full preview, hand change and render in one run has not been done yet.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 
