@@ -2,7 +2,9 @@
 """Word-level timings for a talking-head clip, optionally aligned to the person's script.
 
 usage: transcribe.py <media> --out <dir> [--language bn|en|...] [--script <file>]
-                     [--terms "Name One, Name Two"] [--model mlx-community/whisper-large-v3-mlx]
+                     [--terms "Name One, Name Two"] [--model large-v3|medium|small|tiny]
+
+Uses mlx-whisper on Apple Silicon and whisper-ctranslate2 everywhere else.
 
 Writes <dir>/words.json      [{id, text, start, end, how}]
        <dir>/sentences.json  [{id, text, start, end, words: [first_id, last_id]}]
@@ -23,7 +25,7 @@ import re
 import sys
 import unicodedata
 
-from common import need, probe, run
+from common import need, probe, run, run_whisper, whisper_backend, whisper_install_hint
 
 SENTENCE_END = "।.?!\n"
 STRIP = re.compile(r"[^\wঀ-৿]+", re.UNICODE)
@@ -174,12 +176,14 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--language", help="ISO code such as bn or en; omit only for unknown audio")
     ap.add_argument("--script", help="text file with what the speaker says")
-    ap.add_argument("--model", default="mlx-community/whisper-large-v3-mlx")
+    ap.add_argument("--model", default="large-v3",
+                    help="large-v3 (default), medium, small or tiny; on a CPU-only machine medium is much faster")
     ap.add_argument("--terms", help="a few names or technical terms to help spelling, e.g. 'HyperFrames, Kling AI'")
     args = ap.parse_args()
 
     need("ffmpeg")
-    need("mlx_whisper")
+    if whisper_backend() is None:
+        raise SystemExit(json.dumps({"error": "No Whisper is installed.", "fix": whisper_install_hint()}))
     os.makedirs(args.out, exist_ok=True)
     info = probe(args.media)
     if info.get("audio_codec") is None:
@@ -196,21 +200,14 @@ def main():
         with open(args.script, encoding="utf-8") as f:
             script_text = f.read()
 
-    cmd = ["mlx_whisper", wav, "--model", args.model, "--word-timestamps", "True",
-           "--output-format", "json", "--output-dir", args.out, "--output-name", "whisper",
-           "--condition-on-previous-text", "False", "--verbose", "False"]
-    if args.language:
-        cmd += ["--language", args.language]
     # Never prime Whisper with the script itself: given the words it is about to hear, it
     # treats them as already transcribed and skips the speech (measured: 3 of 45 words heard).
-    # A short list of names and terms is safe.
-    if args.terms:
-        cmd += ["--initial-prompt", args.terms[:200]]
-    # Roughly real time is the worst case on Apple Silicon; allow twice that plus model download.
-    code, out, err = run(cmd, timeout=int(info["duration"] * 2) + 3600)
-    raw_path = os.path.join(args.out, "whisper.json")
-    if code != 0 or not os.path.exists(raw_path):
-        raise SystemExit(json.dumps({"error": "whisper failed", "detail": (err or out)[-600:]}))
+    # A short list of names and terms (--terms) is safe.
+    # Allow well over real time: a CPU-only machine is slow, and the first run downloads the model.
+    raw_path, error = run_whisper(wav, args.out, "whisper", model=args.model, language=args.language,
+                                  terms=args.terms, timeout=int(info["duration"] * 6) + 3600)
+    if error:
+        raise SystemExit(json.dumps({"error": error}))
     with open(raw_path, encoding="utf-8") as f:
         raw = json.load(f)
     heard = whisper_words(raw)
@@ -218,7 +215,7 @@ def main():
         raise SystemExit(json.dumps({"error": "whisper found no speech"}))
 
     summary = {"language": raw.get("language"), "duration": info["duration"],
-               "heard_words": len(heard), "model": args.model}
+               "heard_words": len(heard), "model": args.model, "engine": whisper_backend()}
     if script_text:
         tokens = split_script(script_text)
         words = align(tokens, heard)

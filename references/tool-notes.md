@@ -2,6 +2,10 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - cross-platform support
+
+- Scripts now run on macOS (Apple Silicon and Intel), Linux and Windows. Tested for real on an Apple Silicon Mac only. The second Whisper engine (`whisper-ctranslate2`) was tested on that Mac; the apt, pacman, dnf and winget version checks were tested against sample output, not on those systems. The first run on Linux or Windows is the test: record what you find here.
+
 ## 2026-11-14 - first automatic update
 
 - Node.js 22.22.1 to 22.23.5 through `check_updates.py --apply`; smoke test passed.

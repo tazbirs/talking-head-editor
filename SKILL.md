@@ -13,15 +13,15 @@ What the person wants, in their words: make the creative decisions yourself, do 
 
 | Job | Tool | Why this one |
 | --- | --- | --- |
-| Word timings | `scripts/transcribe.py` (Whisper large-v3) | Covers Bangla and English; Parakeet does not cover Bangla |
+| Word timings | `scripts/transcribe.py` (Whisper large-v3: `mlx-whisper` on Apple Silicon, `whisper-ctranslate2` elsewhere) | Covers Bangla and English; Parakeet does not cover Bangla |
 | Layouts, zooms, graphics, all on-screen text | HyperFrames (`/hyperframes:hyperframes`) | Renders through Chrome, which shapes Bengali conjuncts correctly |
 | Motion craft (easing, stagger, exits) | `remotion-motion-graphics` skill, as a rulebook only | Its ten motion rules apply to any engine; do not start a second renderer |
 | Probing, cutting, audio measurement, final checks | FFmpeg / ffprobe, `scripts/probe.py`, `scripts/qc.py` | |
 | Glue | Python 3 and Node.js | |
 
-Never draw text with FFmpeg (`drawtext`, `subtitles`): this machine's build has no text filters, and FFmpeg breaks Bengali shaping anyway.
+Never draw text with FFmpeg (`drawtext`, `subtitles`): many builds ship without text filters, and FFmpeg does not shape Bengali reliably.
 
-Run commands with `/opt/homebrew/bin` and `~/.local/bin` on `PATH`. `SKILL_DIR` below means the folder this file is in.
+The skill runs on macOS, Linux and Windows. The scripts find their tools and pick the right Whisper engine and package manager themselves; `references/platforms.md` has what differs per system and what to install when something is missing. `SKILL_DIR` below means the folder this file is in. Commands are written with `python3`; on Windows use `python`.
 
 ## Step 0 - Tools up to date
 
@@ -34,6 +34,9 @@ It checks at most once a day, stable releases only, and prints JSON. Act on `act
 - `none`: carry on.
 - `apply`: run `python3 "$SKILL_DIR/scripts/check_updates.py" --apply` before any render, then read `references/updates.md` for what to do after a significant update. The person gave standing permission for these updates, including the HyperFrames plugin, so the plugin's own "do not update the plugin yourself" note does not apply here.
 - `review_remotion` (as the action, or `"review_remotion": true` beside another action): the Remotion skill changed upstream. It is instructions from one individual's repository, so it is reviewed, never auto-installed: follow `references/updates.md`.
+
+- `manual_updates` (any action): on Linux and Windows, system packages need administrator rights, so the script reports them with the command instead of installing. Carry on with the edit and give the person those commands in the delivery note.
+- `errors`: a missing tool or a Node.js older than 22 is named here; `references/platforms.md` has the install command for this system.
 
 If the check cannot reach the network, edit with the installed versions and say so in the delivery note. A failed update never blocks an edit.
 
@@ -57,7 +60,7 @@ python3 "$SKILL_DIR/scripts/transcribe.py" <video> --out <dir>/transcript \
 - Pass `--language` whenever you know it. A Bangla video with English terms is `bn`. Leave it out only for truly unknown audio.
 - With `--script`, the script's own spelling is kept and Whisper only supplies the timing, which is what makes Bangla captions trustworthy. Without a script, Whisper's text is used: tell the person the Bangla spelling is unverified.
 - Read the summary it prints. `match_rate` under about 0.6 means the script and the speech disagree (ad-libs, a different take, or weak recognition): check `sentences.json` against the audio at a few points before building on it, and say so at delivery.
-- The first run downloads the large-v3 model (about 3 GB).
+- The first run downloads the large-v3 model (about 3 GB). On a machine with no GPU, large-v3 can take several times the video's length: for a long video say so, or use `--model medium`.
 
 Outputs: `words.json` (`id`, `text`, `start`, `end`, `how`) and `sentences.json`. Both are the clock for everything that follows: a graphic lands on the word that says it.
 
@@ -113,5 +116,6 @@ Give the path of the MP4 and a short note:
 | `references/edit-plan.md` | Before writing the plan: plan format, layouts, camera limits, emotion table, density |
 | `references/typography.md` | Before any on-screen text: Bangla and English fonts, sizes, shaping checks |
 | `references/sound.md` | Before placing audio: sources, levels, which sound goes with which action |
+| `references/platforms.md` | When a tool is missing, or on any system other than an Apple Silicon Mac |
 | `references/updates.md` | When Step 0 reports `apply` or `review_remotion`, or a tool misbehaves after an update |
 | `references/tool-notes.md` | Always, briefly: commands or behaviours that changed in a tool release since this skill was written |

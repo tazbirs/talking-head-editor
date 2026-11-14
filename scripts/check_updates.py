@@ -10,6 +10,7 @@ usage: check_updates.py                     check (at most once a day) and say w
 Prints JSON. Never raises on a network failure: a tool that cannot be checked is listed
 under "errors" and left as it is.
 """
+import difflib
 import json
 import os
 import re
@@ -18,7 +19,7 @@ import sys
 import time
 import urllib.request
 
-from common import CACHE_DIR, HOME, SKILL_DIR, run, version_tuple
+from common import APPLE_SILICON, CACHE_DIR, HOME, SKILL_DIR, SYSTEM, run, version_tuple, which
 
 STATE = os.path.join(CACHE_DIR, "update-check.json")
 HISTORY = os.path.join(CACHE_DIR, "update-history.jsonl")
@@ -27,6 +28,28 @@ DAY = 24 * 3600
 
 BREW = {"ffmpeg": "ffmpeg", "node": "node@22", "python": "python@3.13", "uv": "uv"}
 RUNTIME_LATEST = {"node": "node", "python": "python"}   # unversioned formulae = newest major line
+
+# System package managers other than Homebrew need administrator rights, and on Arch a
+# single-package upgrade is unsupported. So on those systems this script only reports a new
+# version and the command for the person to run; it never runs sudo or accepts a prompt.
+# Each tool lists the package names to try, first installed one wins.
+SYSTEM_PACKAGES = {
+    "apt": {"ffmpeg": ["ffmpeg"], "node": ["nodejs"], "python": ["python3"], "uv": []},
+    "pacman": {"ffmpeg": ["ffmpeg"], "node": ["nodejs-lts-jod", "nodejs"], "python": ["python"], "uv": ["uv"]},
+    "dnf": {"ffmpeg": ["ffmpeg", "ffmpeg-free"], "node": ["nodejs22", "nodejs"], "python": ["python3"], "uv": ["uv"]},
+    "winget": {"ffmpeg": ["Gyan.FFmpeg"], "node": ["OpenJS.NodeJS.22", "OpenJS.NodeJS.LTS", "OpenJS.NodeJS"],
+               "python": ["Python.Python.3.13", "Python.Python.3.12"], "uv": ["astral-sh.uv"]},
+}
+UPGRADE_COMMAND = {
+    "apt": "sudo apt update && sudo apt install --only-upgrade {pkg}",
+    "pacman": "sudo pacman -Syu",          # full upgrade: Arch does not support upgrading one package alone
+    "dnf": "sudo dnf upgrade {pkg}",
+    "winget": "winget upgrade --id {pkg} --exact",
+}
+BINARY_VERSION = {"ffmpeg": ["ffmpeg", "-version"], "node": ["node", "--version"],
+                  "python": [sys.executable, "--version"], "uv": ["uv", "--version"]}
+MIN_NODE = 22
+WHISPER_TOOL = "mlx-whisper" if APPLE_SILICON else "whisper-ctranslate2"
 PLUGIN = "hyperframes@hyperframes"
 REMOTION_DIR = os.path.join(HOME, ".claude", "skills", "remotion-motion-graphics")
 REMOTION_REPO = "https://github.com/haidrrrry/claude-remotion-skill.git"
@@ -73,16 +96,116 @@ def significant(level, threshold):
 
 
 def claude_bin():
-    return shutil.which("claude") or os.path.join(HOME, ".local", "bin", "claude")
+    return which("claude") or os.path.join(HOME, ".local", "bin", "claude")
 
 
 # ---- where versions come from -------------------------------------------------------------
 
+def package_manager():
+    """brew | apt | pacman | dnf | winget | None, for the system this is running on."""
+    if SYSTEM == "Darwin":
+        return "brew" if which("brew") else None
+    if SYSTEM == "Windows":
+        return "winget" if which("winget") else None
+    for name, probe_bin in (("apt", "apt-cache"), ("pacman", "pacman"), ("dnf", "dnf"), ("brew", "brew")):
+        if which(probe_bin):
+            return name
+    return None
+
+
+def binary_version(tool):
+    code, out, err = run(BINARY_VERSION[tool], timeout=30)
+    text = (out or err).strip().splitlines()[0] if code == 0 and (out or err).strip() else ""
+    v = version_tuple(text)
+    return ".".join(str(n) for n in v) if v else None
+
+
+def candidate_version(manager, pkg):
+    """The newest version the system's package manager offers for pkg, or None."""
+    if manager == "apt":
+        _, out, _ = run(["apt-cache", "policy", pkg], timeout=60)
+        m = re.search(r"Candidate:\s*(\S+)", out)
+        return m.group(1) if m and m.group(1) != "(none)" else None
+    if manager == "pacman":
+        code, out, _ = run(["pacman", "-Si", pkg], timeout=60)
+        m = re.search(r"^Version\s*:\s*(\S+)", out, re.M)
+        return m.group(1) if code == 0 and m else None
+    if manager == "dnf":
+        code, out, _ = run(["dnf", "-q", "repoquery", "--latest-limit=1", "--queryformat", "%{version}\n", pkg],
+                           timeout=120)
+        lines = [ln.strip() for ln in out.splitlines() if version_tuple(ln)]
+        return lines[-1] if code == 0 and lines else None
+    if manager == "winget":
+        code, out, _ = run(["winget", "show", "--id", pkg, "--exact", "--disable-interactivity"], timeout=120)
+        m = re.search(r"^Version:\s*(\S+)", out, re.M)
+        return m.group(1) if code == 0 and m else None
+    return None
+
+
+def is_installed(manager, pkg):
+    if manager == "apt":
+        _, out, _ = run(["apt-cache", "policy", pkg], timeout=60)
+        m = re.search(r"Installed:\s*(\S+)", out)
+        return bool(m and m.group(1) != "(none)")
+    if manager == "pacman":
+        return run(["pacman", "-Q", pkg], timeout=30)[0] == 0
+    if manager == "dnf":
+        return run(["rpm", "-q", pkg], timeout=30)[0] == 0
+    if manager == "winget":
+        return run(["winget", "list", "--id", pkg, "--exact", "--disable-interactivity"], timeout=120)[0] == 0
+    return False
+
+
+def manual_versions(manager, errors):
+    """Versions on systems where this script may not upgrade packages itself."""
+    found = {}
+    for tool in ("ffmpeg", "node", "python", "uv"):
+        installed = binary_version(tool)
+        if installed is None:
+            errors.append("%s is not installed or not on PATH." % tool)
+            continue
+        entry = {"installed": installed, "latest": None, "via": "manual", "distro_channel": True}
+        candidates = SYSTEM_PACKAGES.get(manager, {}).get(tool, [])
+        pkg = next((p for p in candidates if is_installed(manager, p)), None)
+        if pkg:
+            entry["latest"] = candidate_version(manager, pkg)
+            entry["package"] = pkg
+            entry["command"] = UPGRADE_COMMAND[manager].format(pkg=pkg)
+        elif tool == "uv":
+            entry["command"] = "uv self update"      # installed with uv's own installer
+            entry["latest"] = pypi_latest("uv", errors)
+        else:
+            entry["note"] = ("installed outside %s, so its newest version is not known here"
+                             % (manager or "a known package manager"))
+        found[tool] = entry
+    return found
+
+
+def system_versions(errors):
+    manager = package_manager()
+    if manager == "brew":
+        return brew_versions(errors), manager
+    if manager is None:
+        errors.append("No supported package manager found (Homebrew, apt, pacman, dnf, winget): "
+                      "FFmpeg, Node.js and Python versions are reported but not compared.")
+    return manual_versions(manager, errors), manager
+
+
+def pypi_latest(package, errors):
+    """Newest stable, non-yanked release of a PyPI package, or None."""
+    try:
+        with urllib.request.urlopen("https://pypi.org/pypi/%s/json" % package, timeout=20) as r:
+            releases = json.load(r).get("releases", {})
+    except Exception as e:                      # offline, DNS, rate limit: not fatal
+        errors.append("PyPI could not be reached for %s: %s" % (package, e))
+        return None
+    stable = [v for v, files in releases.items()
+              if is_stable(v) and files and not all(f.get("yanked") for f in files)]
+    return max(stable, key=version_tuple) if stable else None
+
+
 def brew_versions(errors):
     found = {}
-    if not shutil.which("brew"):
-        errors.append("Homebrew is not installed: FFmpeg, Node.js, Python and uv cannot be checked.")
-        return found
     run(["brew", "update", "--quiet"], timeout=180)   # refresh formula data; failure just means stale data
     names = list(BREW.values()) + list(RUNTIME_LATEST.values())
     code, out, err = run(["brew", "info", "--json=v2"] + names, timeout=120)
@@ -124,23 +247,14 @@ def hyperframes_versions(errors):
 
 def whisper_versions(errors):
     installed = None
-    code, out, _ = run(["uv", "tool", "list"], timeout=60)
-    m = re.search(r"^mlx-whisper v(\S+)", out, re.M)
+    _, out, _ = run(["uv", "tool", "list"], timeout=60)
+    m = re.search(r"^%s v(\S+)" % re.escape(WHISPER_TOOL), out, re.M)
     if m:
         installed = m.group(1)
     else:
-        errors.append("mlx-whisper is not installed as a uv tool.")
-    latest = None
-    try:
-        with urllib.request.urlopen("https://pypi.org/pypi/mlx-whisper/json", timeout=20) as r:
-            releases = json.load(r).get("releases", {})
-        stable = [v for v, files in releases.items()
-                  if is_stable(v) and files and not all(f.get("yanked") for f in files)]
-        if stable:
-            latest = max(stable, key=version_tuple)
-    except Exception as e:                      # offline, DNS, rate limit: not fatal
-        errors.append("PyPI could not be reached for mlx-whisper: %s" % e)
-    return {"installed": installed, "latest": latest, "via": "uv tool"}
+        errors.append("%s is not installed as a uv tool (uv tool install --python 3.12 %s)."
+                      % (WHISPER_TOOL, WHISPER_TOOL))
+    return {"installed": installed, "latest": pypi_latest(WHISPER_TOOL, errors), "via": "uv tool"}
 
 
 def remotion_state(errors):
@@ -161,20 +275,30 @@ def remotion_state(errors):
 
 def check():
     errors, threshold = [], policy()
-    tools = brew_versions(errors)
+    tools, manager = system_versions(errors)
     tools["hyperframes"] = hyperframes_versions(errors)
-    tools["mlx-whisper"] = whisper_versions(errors)
-    to_update, patches, notes = [], [], []
+    tools[WHISPER_TOOL] = whisper_versions(errors)
+    to_update, manual, patches, notes = [], [], [], []
+    node = version_tuple(tools.get("node", {}).get("installed"))
+    if node and node[0] < MIN_NODE:
+        errors.append("Node.js %s is too old: HyperFrames needs %d or newer." % (tools["node"]["installed"], MIN_NODE))
     for name, t in tools.items():
         latest = t.get("latest")
-        if latest and not is_stable(latest):
+        # A distribution's own repository is its stable channel, whatever its version strings look like.
+        if latest and not t.get("distro_channel") and not is_stable(latest):
             errors.append("%s: newest listed version %s is not a stable release; ignored." % (name, latest))
             t["level"] = "none"
             continue
         t["level"] = bump(t.get("installed"), latest) if t.get("installed") else "none"
         if t["level"] == "none":
             continue
-        (to_update if significant(t["level"], threshold) else patches).append(name)
+        if not significant(t["level"], threshold):
+            patches.append(name)
+        elif t["via"] == "manual":
+            manual.append({"tool": name, "from": t["installed"], "to": latest, "level": t["level"],
+                           "command": t.get("command")})
+        else:
+            to_update.append(name)
     # Node and Python stay on their current line; a newer line is only reported.
     for name in ("node", "python"):
         t = tools.get(name, {})
@@ -189,10 +313,13 @@ def check():
     tools["remotion-skill"] = remotion
     return {
         "checked_at": int(time.time()),
+        "system": SYSTEM,
+        "package_manager": manager,
         "channel": "stable releases only",
         "auto_update": threshold,
         "tools": tools,
         "to_update": to_update,
+        "manual_updates": manual,
         "available_patches": patches,
         "review_remotion": review,
         "runtime_notes": notes,
@@ -229,8 +356,8 @@ def update_tool(name, tool):
         if code != 0:
             return code, out, err
         return run([claude_bin(), "plugin", "update", PLUGIN], timeout=600)
-    if name == "mlx-whisper":
-        return run(["uv", "tool", "upgrade", "mlx-whisper"], timeout=1800)
+    if name == WHISPER_TOOL:
+        return run(["uv", "tool", "upgrade", WHISPER_TOOL], timeout=1800)
     return 1, "", "no updater for %s" % name
 
 
@@ -241,7 +368,7 @@ def broken_formulae():
     part of the update (seen on 2026-11-14: upgrading node@22 moved simdjson and broke a
     separately installed `node`).
     """
-    if not shutil.which("brew"):
+    if package_manager() != "brew":
         return []
     _, out, err = run(["brew", "linkage", "--test"], timeout=600)
     broken, current = [], None
@@ -295,6 +422,7 @@ def apply():
         "significant": [u["tool"] for u in updated],
         "other_packages_repaired": repaired,
         "other_packages_still_broken": still_broken,
+        "manual_updates": after["manual_updates"],
         "smoke": smoke,
         "review_remotion": after["review_remotion"],
         "restart_needed": any(u["tool"] == "hyperframes" for u in updated),
@@ -308,6 +436,39 @@ def apply():
 
 # ---- the Remotion skill: stage, review, install --------------------------------------------
 
+def tree_diff(old_dir, new_dir, skip=(".source.json",)):
+    """A unified diff of two folders, without needing a `diff` program (Windows has none)."""
+    def files(root):
+        out = {}
+        for base, _, names in os.walk(root):
+            for n in names:
+                if n not in skip:
+                    full = os.path.join(base, n)
+                    out[os.path.relpath(full, root).replace(os.sep, "/")] = full
+        return out
+
+    def lines(path):
+        if not path:
+            return []
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read().splitlines(keepends=True)
+        except (UnicodeDecodeError, OSError):
+            return None                                   # binary or unreadable
+
+    old, new, chunks = files(old_dir), files(new_dir), []
+    for rel in sorted(set(old) | set(new)):
+        a, b = lines(old.get(rel)), lines(new.get(rel))
+        if a is None or b is None:
+            with_change = not (old.get(rel) and new.get(rel)) or \
+                open(old[rel], "rb").read() != open(new[rel], "rb").read()
+            if with_change:
+                chunks.append("Binary file %s added, removed or changed: inspect it before installing.\n" % rel)
+            continue
+        chunks.extend(difflib.unified_diff(a, b, "installed/" + rel, "new/" + rel))
+    return "".join(c if c.endswith("\n") else c + "\n" for c in chunks)
+
+
 def stage_remotion():
     shutil.rmtree(STAGED, ignore_errors=True)
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -319,7 +480,7 @@ def stage_remotion():
     new_dir = os.path.join(STAGED, REMOTION_SUBDIR)
     if not os.path.isfile(os.path.join(new_dir, "SKILL.md")):
         return {"error": "the repository no longer contains %s/SKILL.md" % REMOTION_SUBDIR}
-    _, diff, _ = run(["diff", "-ruN", "-x", ".source.json", REMOTION_DIR, new_dir], timeout=60)
+    diff = tree_diff(REMOTION_DIR, new_dir)
     diff_file = os.path.join(CACHE_DIR, "remotion-update.diff")
     with open(diff_file, "w", encoding="utf-8") as f:
         f.write(diff)

@@ -4,12 +4,15 @@ The person asked for this: check for new releases every time, stable releases on
 
 ## What `check_updates.py` covers
 
-| Tool | Installed version from | Latest stable from | Updated with |
-| --- | --- | --- | --- |
-| FFmpeg, Node.js 22, Python 3.13, uv | the binaries | Homebrew's stable formula | `brew upgrade <formula>` |
-| HyperFrames plugin + CLI | `claude plugin list --json` | npm `latest` tag | `claude plugin marketplace update hyperframes`, `claude plugin update hyperframes@hyperframes` |
-| Whisper (`mlx-whisper`) | `uv tool list` | PyPI, pre-releases and yanked files skipped | `uv tool upgrade mlx-whisper` |
-| Remotion skill | `.source.json` in its folder | the repository's default branch | reviewed by hand, see below |
+| Tool | Latest stable from | Updated |
+| --- | --- | --- |
+| HyperFrames plugin + CLI | npm `latest` tag | Automatically, on every system: `claude plugin marketplace update hyperframes`, `claude plugin update hyperframes@hyperframes` |
+| Whisper (`mlx-whisper` on Apple Silicon, `whisper-ctranslate2` elsewhere) | PyPI, pre-releases and yanked files skipped | Automatically, on every system: `uv tool upgrade <name>` |
+| FFmpeg, Node.js, Python, uv with **Homebrew** (macOS, Linuxbrew) | Homebrew's stable formula | Automatically: `brew upgrade <formula>` |
+| The same four with **apt, pacman, dnf or winget** | the system's own package repository | Reported under `manual_updates` with the command; the person runs it |
+| Remotion skill | the repository's default branch | Reviewed by hand, see below |
+
+Why system packages are not installed automatically outside Homebrew: they need `sudo` or an administrator prompt, which this skill must never answer for the person, and on Arch upgrading one package alone is unsupported (the command given is a full `sudo pacman -Syu`). A distribution's repository is its stable channel, so "stable only" holds there too; on Debian stable the versions simply move slowly.
 
 - It checks at most once every 24 hours (`--force` to check now). State lives in `~/.cache/talking-head-editor/`.
 - **What counts as significant.** A new major version, or a new minor version (for 0.x tools the minor number is the breaking one). Patch releases are listed under `available_patches` and left alone: HyperFrames ships patch releases almost daily, and chasing each one adds risk in the middle of real work. To change this, edit `auto_update` in `scripts/update-policy.json`: `patch` updates on everything, `minor` is the default, `major` waits for major versions only.
