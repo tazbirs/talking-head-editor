@@ -7,6 +7,12 @@ A Claude skill that makes finished YouTube videos in Bangla or English, two ways
 
 Either way Claude hands back an MP4.
 
+## Watch it explained (Bangla, 4.5 minutes)
+
+[![Watch the Bangla explainer on YouTube](https://img.youtube.com/vi/pV0oD3snAdY/maxresdefault.jpg)](https://www.youtube.com/watch?v=pV0oD3snAdY)
+
+Click the image to watch on YouTube. The video was made with this skill's animated explainer mode: script to scenes, narration, sound effects and render.
+
 The explainer mode is for motion graphics. It is not for cartoon-style character animation.
 
 ## Status
