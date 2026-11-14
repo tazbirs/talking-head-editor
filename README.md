@@ -11,7 +11,10 @@ The explainer mode is for motion graphics. It is not for cartoon-style character
 
 ## Status
 
-Early. The helper scripts are tested (see below); the full workflow has not yet been run on real Bangla footage. Treat the first real edits as the test.
+Early, and the two modes are at different stages:
+
+- **Animated explainer: used for real.** A 4.5-minute narrated Bangla explainer was made with it end to end (script, ElevenLabs voice, 11 scenes, sound effects, render, checks).
+- **Talking-head edit: not yet run on real footage.** Its helper scripts are tested (see below), but no real recording has been edited with the full workflow. Treat your first edit as the test.
 
 Platform support: built and tested on an Apple Silicon Mac. The scripts also handle Intel Macs, Linux (Debian/Ubuntu, Arch, Fedora, others) and Windows, but those paths have been tested only in simulation, not on those systems. Reports and fixes are welcome.
 
@@ -22,6 +25,7 @@ Platform support: built and tested on an Apple Silicon Mac. The scripts also han
 | Word timings | Whisper large-v3: [`mlx-whisper`](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon, [`whisper-ctranslate2`](https://github.com/Softcatala/whisper-ctranslate2) everywhere else |
 | Layouts, graphics and all on-screen text | [HyperFrames](https://github.com/heygen-com/hyperframes) (Claude Code plugin) |
 | Motion design rules | [claude-remotion-skill](https://github.com/haidrrrry/claude-remotion-skill), used as a rulebook only |
+| Narration for explainers | Your own recording, or a generated voice: Kokoro (local English), [ElevenLabs](https://elevenlabs.io), Azure Speech |
 | Probing, audio measurement, final checks | [FFmpeg](https://ffmpeg.org) |
 | Glue | Python 3.9+ (standard library only), Node.js 22+ |
 
@@ -126,7 +130,7 @@ references/
   tool-notes.md            what changed in each tool release; the skill's own memory
 scripts/
   probe.py                 facts about a clip (resolution, fps, HDR, keyframes)
-  transcribe.py            Whisper word timings, aligned to the script's own text
+  transcribe.py            Whisper word timings, aligned to the script's own text; takes a recording in parts
   pace.py                  timings for a video with no voice, from reading pace
   voice.py                 generated voiceover and its timings (say, Kokoro, ElevenLabs, Azure, edge-tts)
   qc.py                    checks a render against its source; writes contact sheets
@@ -144,12 +148,16 @@ For a video with no speaker, Claude asks which voice you want before building.
 | --- | --- | --- | --- |
 | Your own recording | yes | yes | Best result. Claude gives you the narration to read and times the video to your audio. |
 | Kokoro (local) | no | natural, male and female | Free, nothing leaves your machine. |
-| ElevenLabs | natural and expressive (Eleven v3 model) | natural | Official. Needs your own key in `ELEVENLABS_API_KEY`; you pick the voice in your account. Voice Library voices need a paid plan to use through the API, and to publish. |
+| ElevenLabs | natural and expressive (Eleven v3 and v4 models) | natural | Official. Needs your own key in `ELEVENLABS_API_KEY`; you pick the voice in your account. Voice Library voices need a paid plan to use through the API, and to publish. |
 | Azure Speech | natural, male and female | natural | Official and licensed. Needs your own key in `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`. |
 | edge-tts | same voices as Azure | same | Free and needs no account, but it is an unofficial route: your call whether to publish with it. |
 | macOS `say` | one synthetic female voice | several | A draft voice for checking timing. Apple licenses it for personal, non-commercial use. |
 
 There is no natural Bangla voice that is both local and free, so for Bangla the real choices are your own recording or an online voice. Online voices send the narration text to that service.
+
+Keys for online voices are read from the environment, or from a file you create yourself at `~/.config/talking-head-editor/keys.env` with lines such as `ELEVENLABS_API_KEY=...`. The skill never prints or stores a key.
+
+On ElevenLabs the same voice can be a Hindi voice on one model and a Bangla voice on another. The skill reads which models a voice is verified on for your language and uses one of those. After generating, it checks the result by transcribing it back, because Claude cannot hear it; listen to it yourself before publishing.
 
 ## Updates
 
@@ -170,8 +178,10 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - End-to-end transcription with a script on synthetic English speech: 44 of 44 words matched.
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
-- Animated explainer: a 2.5-minute, 11-scene Bangla explainer made from a script, with a real page capture and bundled sound effects, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
-- Voices: local English (Kokoro, male and female) verified by transcribing it back; a narrated 4.5-minute render stayed in sync with its voice file to the millisecond. ElevenLabs is tested with a Bangla voice: a 4.5-minute narrated explainer, verified by transcription and in sync to the millisecond. The Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
+- Animated explainer: a 2.5-minute, 11-scene Bangla explainer made from a script, with a real page capture and bundled sound effects, built, rendered and checked end to end. A script written by Claude from a topic alone is not yet tried.
+- Narrated explainer: the same video re-timed to a 563-word Bangla narration. Whisper identified the audio as Bengali and heard 559 of the 563 words; the narration sat at +0 ms against the voice file at the start and the end of the render.
+- Timing from a recording: aligning that natural Bangla audio to its script by transcription put passage starts within 0.3 s for 32 of 47 passages, with a worst case of 2.6 s. On a synthetic voice that Whisper recognised poorly, the same method was unreliable, and the script warns when recognition is that low.
+- Voices: local English (Kokoro, male and female) verified by transcribing it back. ElevenLabs is tested with a Bangla voice: a 4.5-minute narrated explainer, verified by transcription and in sync to the millisecond. The Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 
