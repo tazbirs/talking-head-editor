@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Timing for a video with no voice: how long each on-screen line needs to be read.
 
-usage: pace.py <lines file> --out <dir> [--base 0.5] [--per-word 0.3] [--gap 0.5] [--start 0]
+usage: pace.py <lines file> --out <dir> [--base 0.5] [--per-word 0.3] [--transition 0.45]
+               [--min 2.3] [--gap 0.5] [--start 0]
 
 The lines file has one on-screen line per line and a blank line between scenes. Text in
 brackets is a note and is skipped. Each line is held for base + per-word x words seconds
 (HyperFrames' reading pace); Bengali lines get 10% longer, since conjuncts read slower.
+The reading time is counted while the line is fully there, so --transition is added on top
+for its entrance and exit. No line is held for less than --min: a short line still needs its entrance, a moment to be
+read and its exit (HyperFrames' check reports shorter ones as `line_unread`). Hyphenated
+names such as talking-head-editor count one word per part, as a reader takes them.
 
 Writes the same files as transcribe.py, so the rest of the workflow does not change:
   <dir>/words.json      [{id, text, start, end, how: "paced"}]
@@ -48,6 +53,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--base", type=float, default=0.5, help="seconds every line gets")
     ap.add_argument("--per-word", type=float, default=0.3, help="extra seconds per word")
+    ap.add_argument("--transition", type=float, default=0.45,
+                    help="seconds added to every line for its entrance and exit animation")
+    ap.add_argument("--min", type=float, default=2.3, help="shortest time any line is held")
     ap.add_argument("--gap", type=float, default=0.5, help="seconds between scenes, for the transition")
     ap.add_argument("--start", type=float, default=0.0,
                     help="seconds before the first line; keep 0, the first frame is the thumbnail")
@@ -62,9 +70,11 @@ def main():
         scene_start = t
         for line in lines:
             tokens = line.split()
-            hold = args.base + args.per_word * len(tokens)
+            read_words = sum(len([p for p in tok.split("-") if p]) or 1 for tok in tokens)
+            hold = args.base + args.per_word * read_words
             if BENGALI.search(line):
                 hold *= 1.1
+            hold = max(hold + args.transition, args.min)
             step = hold / len(tokens)
             first = len(words)
             for k, tok in enumerate(tokens):

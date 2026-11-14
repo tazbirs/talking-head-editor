@@ -153,7 +153,7 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - End-to-end transcription with a script on synthetic English speech: 44 of 44 words matched.
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
-- Animated explainer: a 12-second, three-scene Bangla explainer with no voice, paced, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
+- Animated explainer: a 2.5-minute, 11-scene Bangla explainer made from a script, with a real page capture and bundled sound effects, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 

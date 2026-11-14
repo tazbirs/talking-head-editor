@@ -2,6 +2,17 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - first full explainer (2 min 29 s, Bangla, 11 scenes)
+
+- Made end to end from a script: 47 on-screen lines, 11 sub-compositions, a real page capture, 20 bundled sound effects. `check` clean, render 65 s on an M2, `qc.py` pass.
+- **Pacing.** HyperFrames' `line_unread` check counts reading time only while a line is fully on screen, and counts hyphenated names per part. `pace.py` now adds `--transition` (0.45 s) for the entrance and exit and has a `--min` hold (2.3 s). Text that appears inside a panel late in a line trips the same check: bring it in within about 0.8 s of the line.
+- **Sound without sign-in.** `media-use resolve --type sfx --intent "..."` returns HyperFrames' bundled effects (whoosh-short, whoosh-cinematic, pop, key-press, impact-bass, click, riser and others) with no account. Two different intents can return the same file, so check `library_key`. Music and generated voices need the HeyGen sign-in; without it the video has effects only.
+- **Placing a sound.** `hyperframes audio <file> --json` gives `moments.peak`; start the clip at `event + 1/30 - peak`. The bass impact is loud (true peak -0.4 dB): `data-volume="0.35"`. An effects-only track measures around -19 LUFS, which `qc.py` reports as a warning; that is expected with no voice or music.
+- **Audio clips** go in the root: `<audio id class="clip" src data-start data-duration data-track-index data-volume>`, one track per kind of sound so they never overlap.
+- **Exits.** A `fromTo` used as an exit needs `immediateRender: false`, or its start state is applied at build time and the element shows before its entrance.
+- **Real page capture.** `hyperframes capture <url> --skip-vision --max-screenshots 3` gave a clean 1920x1080 screenshot of a public GitHub page in about a minute.
+- Still untried: a narrated explainer with a real recording, a script written from a topic.
+
 ## 2026-11-14 - animated explainer mode
 
 - First real run: a 12 s, three-scene Bangla explainer with no voice, paced by `pace.py`, built in HyperFrames, rendered and checked with `qc.py --expect`. Bangla conjuncts rendered correctly with the bundled Hind Siliguri.

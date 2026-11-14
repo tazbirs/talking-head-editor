@@ -39,6 +39,7 @@ Show the person: the one idea, the script, the length, and whether it will be na
 - `transcribe.py` takes an audio file as well as a video.
 - `pace.py` reads a text file with one on-screen line per line and a blank line between scenes, and gives each line `0.5 s + 0.3 s a word` (HyperFrames' reading pace), slightly longer for Bangla. It writes the same `words.json` and `sentences.json` as `transcribe.py`, so everything downstream is identical.
 - **Generated voices and Bangla:** do not assume a Bangla voice exists. Check what `/hyperframes:media-use` offers for the language; the local voice (Kokoro) is not a Bangla voice. If there is no good Bangla voice, say so and offer the two honest options: the person records the script themselves (best result), or an unnarrated video carried by type and music. Never deliver an English-accented or wrong-language voice reading Bangla.
+- Lines that appear inside a picture (a note, a label that is a sentence) follow the same reading rule: bring them in early in their line, or `check` reports `line_unread`.
 - Without a voice, the type carries the meaning: lines are large, up to about 10 words, and music matters more (`sound.md`).
 
 ## 4. Plan
