@@ -24,9 +24,10 @@ sentences.json carries the on-screen text and keeps the spoken text under "spoke
 Engines
   say     macOS built-in voices. Local and free. Bangla: Piya (female) only. A draft voice.
   kokoro  HyperFrames' local Kokoro model. Local and free. Natural English; no Bangla.
-  elevenlabs  ElevenLabs (official). The most expressive Bangla and English voices; Bangla needs the
-          Eleven v3 model. Needs ELEVENLABS_API_KEY, and --voice with a voice name or id from the
-          person's account. Publishing needs a paid plan (commercial licence).
+  elevenlabs  ElevenLabs (official). The most expressive Bangla and English voices. Needs
+          ELEVENLABS_API_KEY, and --voice with a voice name or id from the person's account. The
+          model is picked from those the voice is verified on for the language (--model overrides).
+          Library voices through the API, and publishing, need a paid plan.
   azure   Microsoft Azure Speech (official). Natural Bangla and English, male and female.
           Needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION in the environment.
   edge    The same Microsoft neural voices through the unofficial `edge-tts` tool. No account,
@@ -67,8 +68,9 @@ KEYS_FILE = os.path.join(os.path.expanduser("~"), ".config", "talking-head-edito
 NOTES = {
     "say": "macOS only, local. Apple's licence covers personal, non-commercial use: a draft voice.",
     "kokoro": "Local, natural English. Installs on first use.",
-    "elevenlabs": "Official. Bangla needs the Eleven v3 model. Needs ELEVENLABS_API_KEY and --voice. Publishing "
-                  "needs a paid plan. Sends text to ElevenLabs.",
+    "elevenlabs": "Official. Needs ELEVENLABS_API_KEY and --voice; the model is chosen from what the voice is "
+                  "verified on for the language. Library voices and publishing need a paid plan. "
+                  "Sends text to ElevenLabs.",
     "azure": "Official and licensed. Needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION. Sends text to Microsoft.",
     "edge": "Unofficial access to Microsoft's voices: no account, not a licensed route. Sends text to Microsoft.",
 }
@@ -142,6 +144,28 @@ def eleven_voice_id(asked):
                   "voices first; `voice.py --list --engine elevenlabs` shows what is there." % asked)
 
 
+ELEVEN_PREFERENCE = ["eleven_v4", "eleven_v3", "eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"]
+
+
+def eleven_model(voice_id, language, asked):
+    """Which model to speak with. Returns (model id, whether the voice is verified in this language on it).
+
+    A library voice is verified per language and per model, and the same voice can be a Hindi
+    voice on one model and a Bangla voice on another. Use a model it is verified on for this language.
+    """
+    detail, _ = eleven_get("/voices/%s" % voice_id)
+    verified = [v.get("model_id") for v in ((detail or {}).get("verified_languages") or [])
+                if v.get("language") == language]
+    if asked:
+        return asked, asked in verified
+    for model in ELEVEN_PREFERENCE:
+        if model in verified:
+            return model, True
+    if verified:
+        return verified[0], True
+    return ("eleven_v3" if language == "bn" else "eleven_multilingual_v2"), False
+
+
 def pick_voice(engine, language, gender, asked):
     if engine == "elevenlabs":
         if not asked:
@@ -182,7 +206,7 @@ def ensure_kokoro():
     return None
 
 
-def speak(engine, voice, language, rate, text, raw):
+def speak(engine, voice, language, rate, text, raw, model=None):
     """Speak one passage into `raw` (any audio format). Returns an error string or None."""
     if engine == "say":
         if SYSTEM != "Darwin" or not which("say"):
@@ -206,7 +230,7 @@ def speak(engine, voice, language, rate, text, raw):
         key = secret("ELEVENLABS_API_KEY")
         if not key:
             return "ELEVENLABS_API_KEY is not set (environment, or %s)" % KEYS_FILE
-        body = {"text": text, "model_id": secret("ELEVENLABS_MODEL") or "eleven_v3", "language_code": language}
+        body = {"text": text, "model_id": model or "eleven_v3", "language_code": language}
         if rate:
             body["voice_settings"] = {"speed": float(rate)}
         req = urllib.request.Request(
@@ -268,6 +292,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--engine", choices=sorted(NOTES))
     ap.add_argument("--voice")
+    ap.add_argument("--model", help="elevenlabs only: model id. Default: a model the voice is verified on for the language")
     ap.add_argument("--gender", choices=["male", "female"], default="male")
     ap.add_argument("--language", help="bn or en; detected from the narration when omitted")
     ap.add_argument("--lines", help="on-screen lines file matching the narration passage for passage")
@@ -299,6 +324,9 @@ def main():
     flat = [(k, text) for k, scene in enumerate(scenes) for text in scene]
     language = args.language or ("bn" if BENGALI.search(" ".join(t for _, t in flat)) else "en")
     voice = pick_voice(args.engine, language, args.gender, args.voice)
+    model, verified = None, None
+    if args.engine == "elevenlabs":
+        model, verified = eleven_model(voice, language, args.model or secret("ELEVENLABS_MODEL"))
 
     shown = None
     if args.lines:
@@ -313,11 +341,11 @@ def main():
     silence = lambda seconds: b"\x00\x00" * int(round(seconds * RATE))
     audio, sentences, words, spoken_seconds, made = bytearray(silence(args.lead)), [], [], 0.0, 0
     for i, (scene, text) in enumerate(flat):
-        tag = hashlib.sha1(("%s|%s|%s|%s" % (args.engine, voice, args.rate, text)).encode("utf-8")).hexdigest()[:16]
+        tag = hashlib.sha1(("%s|%s|%s|%s|%s" % (args.engine, voice, model, args.rate, text)).encode("utf-8")).hexdigest()[:16]
         wav = os.path.join(seg_dir, tag + ".wav")
         if not os.path.exists(wav):
             raw = os.path.join(seg_dir, tag + {"say": ".aiff", "edge": ".mp3", "elevenlabs": ".mp3"}.get(args.engine, ".wav").replace(".wav", ".src.wav"))
-            error = speak(args.engine, voice, language, args.rate, text, raw) or to_pcm(raw, wav)
+            error = speak(args.engine, voice, language, args.rate, text, raw, model) or to_pcm(raw, wav)
             if os.path.exists(raw):
                 os.remove(raw)
             if error:
@@ -370,6 +398,7 @@ def main():
                "speech_seconds": round(spoken_seconds, 1), "words": total_words,
                "words_per_minute": round(total_words / spoken_seconds * 60),
                "voiceover": os.path.abspath(final), "note": NOTES[args.engine],
+               **({"model": model, "voice_verified_for_language_on_model": verified} if model else {}),
                "next": "You cannot hear it: run transcribe.py on voiceover.wav with the narration as --script; "
                        "a low match rate means the voice misreads the text."}
     print(json.dumps(summary, ensure_ascii=False, indent=2))

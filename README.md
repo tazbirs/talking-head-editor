@@ -171,7 +171,7 @@ The Remotion skill is a separate case: it is instructions from a single reposito
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
 - Animated explainer: a 2.5-minute, 11-scene Bangla explainer made from a script, with a real page capture and bundled sound effects, built, rendered and checked end to end. Narrated explainers and scripts written from a topic are not yet tried.
-- Voices: local English (Kokoro, male and female) verified by transcribing it back; a narrated 4.5-minute render stayed in sync with its voice file to the millisecond. The ElevenLabs, Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
+- Voices: local English (Kokoro, male and female) verified by transcribing it back; a narrated 4.5-minute render stayed in sync with its voice file to the millisecond. ElevenLabs is tested with a Bangla voice: a 4.5-minute narrated explainer, verified by transcription and in sync to the millisecond. The Azure and edge-tts engines are written but have not been run against their services. The only local Bangla voice (macOS) could not be verified and is a draft voice only.
 - Both Whisper engines (`mlx-whisper` and `whisper-ctranslate2`) on the same clip: identical word matching.
 - apt, pacman and winget version checks against sample output of those tools. Not yet run on a real Linux or Windows machine.
 

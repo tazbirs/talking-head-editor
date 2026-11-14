@@ -2,6 +2,14 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - first narrated explainer with a natural Bangla voice
+
+- ElevenLabs, voice "Ashwat" (male, Bengali), on a Starter plan: 47 passages, 563 words, 4 min 35 s, 136 words a minute. The render passed `qc.py --voice` with the narration at +0 ms at both ends, -13.1 LUFS.
+- **Model choice matters per voice.** Ashwat is verified for Bangla on the `eleven_v4` family and for Hindi on the older models, so the same voice id is a Hindi voice on Multilingual v2 and a Bangla voice on v4. `voice.py` now reads the voice's `verified_languages` and picks a verified model for the narration's language (`eleven_v4` here). A first attempt on `eleven_v3` was stopped part-way.
+- **Verification that worked:** Whisper large-v3, left to detect the language itself, returned Bengali; against the narration it heard 559 of 563 words with a match rate of 0.77. Nearly all the misses were English terms spelled in Bangla script (এআই, জুম, স্কিল), which Whisper writes in Latin letters.
+- **First measure of Bangla alignment on natural speech:** timing the same audio by transcription (`transcribe.py --by-line`) instead of using the exact per-passage timings gave passage starts with a median error of 0.03 s, 32 of 47 within 0.3 s, 90% within 1.4 s, worst 2.6 s. Good enough to edit to, and worth a look at the few lines it reports as unanchored. On the synthetic macOS voice, which Whisper half-skipped, the same method was off by up to 19 s even after rejecting misplaced matches: when `match_rate` is under about 0.6, do not trust the timings.
+- Whisper large-v3 took over ten minutes for this 4.5-minute file while a render was running. Do not run them together.
+
 ## 2026-11-14 - voices
 
 - **English, Kokoro (local):** works. Male (`am_adam`) and female (`af_heart`) samples transcribed back at 100% and 98%. At the default speed it reads at about 215 words a minute; `--rate 0.9` gives about 200. HyperFrames' `tts` needs a Python with `kokoro-onnx`; `voice.py` makes one with uv and points `HYPERFRAMES_PYTHON` at it.
