@@ -144,7 +144,7 @@ For a video with no speaker, Claude asks which voice you want before building.
 | --- | --- | --- | --- |
 | Your own recording | yes | yes | Best result. Claude gives you the narration to read and times the video to your audio. |
 | Kokoro (local) | no | natural, male and female | Free, nothing leaves your machine. |
-| ElevenLabs | natural and expressive (Eleven v3 model) | natural | Official. Needs your own key in `ELEVENLABS_API_KEY`; you pick the voice in your account. Free to try, paid plan to publish. |
+| ElevenLabs | natural and expressive (Eleven v3 model) | natural | Official. Needs your own key in `ELEVENLABS_API_KEY`; you pick the voice in your account. Voice Library voices need a paid plan to use through the API, and to publish. |
 | Azure Speech | natural, male and female | natural | Official and licensed. Needs your own key in `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`. |
 | edge-tts | same voices as Azure | same | Free and needs no account, but it is an unofficial route: your call whether to publish with it. |
 | macOS `say` | one synthetic female voice | several | A draft voice for checking timing. Apple licenses it for personal, non-commercial use. |
