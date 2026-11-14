@@ -84,6 +84,10 @@ The Remotion skill is the exception: it is instructions from a single repository
 - Quality check: passes a faithful re-encode; catches a wrong resolution and audio delayed by 120 ms and 300 ms, both measured correctly.
 - Update check and apply: found and installed a real Node.js update, then passed the smoke test, including a Bangla title render.
 
+## Licence
+
+MIT, see [LICENSE](LICENSE). The bundled fonts keep their own licence, below.
+
 ## Credits
 
 Fonts in `assets/fonts/` are licensed under the SIL Open Font License 1.1; the licence texts are alongside them. HyperFrames is Apache-2.0, claude-remotion-skill is MIT, and neither is bundled here.
