@@ -10,11 +10,11 @@ What this mode is good at: type, diagrams that build, charts, maps, real screens
 
 | Given | Do |
 | --- | --- |
-| A finished script | Use it word for word. No stop. |
-| A script and a voiceover recording | The recording is the clock (section 3). No stop. |
-| Only a topic | Research it, write the script (section 2), show it and wait once for a yes. |
+| A finished script | Use it word for word. Ask the voice question (section 3), then build. |
+| A script and a voiceover recording | The recording is the clock (section 3). No stop: the voice is already chosen. |
+| Only a topic | Research it, write the script (section 2), show it with the voice question, and wait once for the answers. |
 
-The one stop for a topic-only request exists because the script is what the person publishes under their name, and fixing a sentence costs seconds before the build and a full re-render after it. If they said "no stops" or "just make it", skip the stop and put the script and its sources in the delivery note instead.
+The stop for a topic-only request exists because the script is what the person publishes under their name, and fixing a sentence costs seconds before the build and a full re-render after it. If they said "no stops" or "just make it", skip the script approval and put the script and its sources in the delivery note instead. The voice question is still asked.
 
 ## 2. Writing the script from a topic
 
@@ -28,19 +28,22 @@ The one stop for a topic-only request exists because the script is what the pers
 
 Show the person: the one idea, the script, the length, and whether it will be narrated. Then wait for the yes.
 
-## 3. The clock: where timing comes from
+## 3. The voice, and the clock it sets
 
-| Voice | Clock | Command |
+**Ask first, every time:** does the person want to record the narration themselves, have a generated voice read it, or have no voice? Read `voice.md` before asking: it has what to tell them about each choice, the engines for Bangla and English, and how to verify a voice you cannot hear. Ask this together with the script approval when there is one, so it is still a single stop.
+
+| Their answer | Clock | Command |
 | --- | --- | --- |
-| The person's recording | Their speech | `transcribe.py <audio> --out <dir>/transcript --language bn --script <script>` |
+| Their own recording | Their speech | `transcribe.py <audio> --out <dir>/transcript --language bn --script <narration>` |
+| A generated voice | Each passage's spoken length | `voice.py <narration> --out <dir>/voice --engine <engine> --lines <on-screen lines>` |
 | No voice | Reading pace of the on-screen lines | `pace.py <lines file> --out <dir>/transcript` |
-| A generated voice | The generated audio, then as a recording | `/hyperframes:media-use` (`--type voice`), then `transcribe.py` |
 
-- `transcribe.py` takes an audio file as well as a video.
-- `pace.py` reads a text file with one on-screen line per line and a blank line between scenes, and gives each line `0.5 s + 0.3 s a word` (HyperFrames' reading pace), slightly longer for Bangla. It writes the same `words.json` and `sentences.json` as `transcribe.py`, so everything downstream is identical.
-- **Generated voices and Bangla:** do not assume a Bangla voice exists. Check what `/hyperframes:media-use` offers for the language; the local voice (Kokoro) is not a Bangla voice. If there is no good Bangla voice, say so and offer the two honest options: the person records the script themselves (best result), or an unnarrated video carried by type and music. Never deliver an English-accented or wrong-language voice reading Bangla.
+- All three write the same `words.json` and `sentences.json`, so everything downstream is identical.
+- `pace.py` reads one on-screen line per line with a blank line between scenes, and gives each line `0.5 s + 0.3 s a word` (HyperFrames' reading pace), slightly longer for Bangla, plus time for its entrance and exit.
 - Lines that appear inside a picture (a note, a label that is a sentence) follow the same reading rule: bring them in early in their line, or `check` reports `line_unread`.
+- With a voice, the on-screen lines are short and the narration says more; never have the voice read the screen word for word.
 - Without a voice, the type carries the meaning: lines are large, up to about 10 words, and music matters more (`sound.md`).
+- Build the video from the timing files, not from fixed numbers, so that changing the voice later re-times it instead of rebuilding it.
 
 ## 4. Plan
 

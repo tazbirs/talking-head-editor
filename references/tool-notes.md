@@ -2,6 +2,15 @@
 
 Things learned about the installed tools, newest first. Add an entry whenever a release changes a command, flag or behaviour this skill relies on (see `updates.md`), and correct the affected file at the same time.
 
+## 2026-11-14 - voices
+
+- **English, Kokoro (local):** works. Male (`am_adam`) and female (`af_heart`) samples transcribed back at 100% and 98%. At the default speed it reads at about 215 words a minute; `--rate 0.9` gives about 200. HyperFrames' `tts` needs a Python with `kokoro-onnx`; `voice.py` makes one with uv and points `HYPERFRAMES_PYTHON` at it.
+- **Bangla, macOS `say` (Piya):** the only local Bangla voice: female, India accent, synthetic. Whisper large-v3 recognised only 40% of a 563-word narration read by it (279 words heard), so it could not be verified. Treat it as a timing draft, never as a deliverable.
+- **Bangla, natural male:** exists only online (Microsoft `bn-BD-PradeepNeural`, through Azure with a key, or through the unofficial edge-tts). Both engines are in `voice.py` but neither has been run: the session that wrote them was not allowed to contact the service without the person choosing it. Test before relying on them.
+- **Narrated build:** a 4 min 39 s narrated render timed by `voice.py` passed `qc.py --voice` with the narration at +0 ms against the voice file at the start and at the end.
+- **Check quirk:** an `<audio class="clip">` that ends before the film counts as a change on screen, and the closing line then fails `line_unread`. End the film with the voice file (`voice.py` leaves 1 s of silence after the last passage).
+- **First Bangla transcription with Whisper large-v3** was on that synthetic voice, so it says little about real speech. Real Bangla footage is still untested.
+
 ## 2026-11-14 - first full explainer (2 min 29 s, Bangla, 11 scenes)
 
 - Made end to end from a script: 47 on-screen lines, 11 sub-compositions, a real page capture, 20 bundled sound effects. `check` clean, render 65 s on an M2, `qc.py` pass.

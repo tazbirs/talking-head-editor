@@ -8,7 +8,7 @@ description: Make a finished, professionally edited YouTube video in Bangla or E
 Two kinds of job come through this skill. Decide which one this is first:
 
 - **There is footage of a person speaking** to edit: follow the steps in this file.
-- **There is no footage** (an explainer, an animated video, a topic to discuss in pictures): do Step 0 below, then follow `references/animated-explainer.md` instead of Steps 1-7. Typography, sound, updates and the tool table still apply.
+- **There is no footage** (an explainer, an animated video, a topic to discuss in pictures): do Step 0 below, then follow `references/animated-explainer.md` instead of Steps 1-7. Typography, sound, updates and the tool table still apply. In this mode, always ask the person about the voice before building (`references/voice.md`): record it themselves, a generated voice, or none. This is the one question that is asked even when they want no stops.
 
 The rest of this file describes the footage edit. Turn one raw clip of a person speaking into a finished edit that looks like an editor spent hours in Premiere and After Effects. The person supplies the footage and, usually, the script of what they say (Bangla, English, or a mix). You deliver a rendered MP4, not a plan.
 
@@ -22,6 +22,7 @@ What the person wants, in their words: make the creative decisions yourself, do 
 | Layouts, zooms, graphics, all on-screen text | HyperFrames (`/hyperframes:hyperframes`) | Renders through Chrome, which shapes Bengali conjuncts correctly |
 | Motion craft (easing, stagger, exits) | `remotion-motion-graphics` skill, as a rulebook only | Its ten motion rules apply to any engine; do not start a second renderer |
 | Probing, cutting, audio measurement, final checks | FFmpeg / ffprobe, `scripts/probe.py`, `scripts/qc.py` | |
+| Narration for a video with no speaker | `scripts/voice.py` (generated voice) or the person's own recording | Natural English locally; natural Bangla needs the person's recording or an online voice they choose |
 | Glue | Python 3 and Node.js | |
 
 Never draw text with FFmpeg (`drawtext`, `subtitles`): many builds ship without text filters, and FFmpeg does not shape Bengali reliably.
@@ -120,6 +121,7 @@ Give the path of the MP4 and a short note:
 | --- | --- |
 | `references/edit-plan.md` | Before writing the plan: plan format, layouts, camera limits, emotion table, density |
 | `references/animated-explainer.md` | When there is no footage: script from a topic, timing without a speaker, the explainer plan and checks |
+| `references/voice.md` | Before building anything without a speaker: the voice question, voice engines for Bangla and English, narration writing, how to verify a voice you cannot hear |
 | `references/typography.md` | Before any on-screen text: Bangla and English fonts, sizes, shaping checks |
 | `references/sound.md` | Before placing audio: sources, levels, which sound goes with which action |
 | `references/platforms.md` | When a tool is missing, or on any system other than an Apple Silicon Mac |
